@@ -10,7 +10,15 @@ import { classify, childEnv } from './guard.js';
 export const MODEL_ALIASES = { opus: 'model', fable: 'modelHard', sonnet: 'claude-sonnet-5-5' };
 
 export function describeTool(name, input = {}) {
-  if (name === 'Bash' || name === 'PowerShell') return 'running: ' + String(input.command || '').split('\n')[0].slice(0, 80);
+  if (name === 'Bash' || name === 'PowerShell') {
+    // Prefer the plain-words description the engine gives each command; else a short guess from the command.
+    if (input.description) return String(input.description).slice(0, 80);
+    const cmd = String(input.command || '');
+    if (/https?:\/\//.test(cmd) && /curl|wget|Invoke-WebRequest|iwr|fetch/i.test(cmd)) return 'reading a web page';
+    if (/\bgit\b/.test(cmd)) return 'working with GitHub';
+    if (/\bnpm|node\b/.test(cmd)) return 'running a script';
+    return 'running a command';
+  }
   if (name === 'Read') return 'reading ' + String(input.file_path || '').split(/[\\/]/).slice(-2).join('/');
   if (name === 'Edit' || name === 'Write' || name === 'MultiEdit') return 'editing ' + String(input.file_path || '').split(/[\\/]/).slice(-2).join('/');
   if (name === 'Task' || name === 'Agent') return (input.subagent_type ? input.subagent_type + ': ' : '') + String(input.description || 'working on a sub-task').slice(0, 80);
