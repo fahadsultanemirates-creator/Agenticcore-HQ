@@ -128,3 +128,10 @@ test('approvals: Allow resolves true, Deny false, timeouts deny', async () => {
   assert.equal(p3.allowed, false);
   assert.ok(sent.some((m) => /timed out/.test(m.text)));
 });
+
+test('a key pasted on a model line is ignored, never shown as a model', () => {
+  const c = readConfig({ OPENAI_MODEL: 'sk-proj-abc123', XAI_MODEL: 'xai-zzz', GEMINI_MODEL: 'gemini-3.8-flash' });
+  assert.equal(c.openaiModel, '');
+  assert.equal(c.xaiModel, '');
+  assert.equal(c.geminiModel, 'gemini-3.8-flash');
+});
