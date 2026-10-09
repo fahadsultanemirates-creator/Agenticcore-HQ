@@ -55,7 +55,8 @@ Just talk to it: text or voice notes, in English, Urdu or Roman Urdu. Send photo
 | `/budget 50` | Raise today's Claude cap to $50 |
 | `/model opus` · `fable` · `sonnet` | Which Claude leads (default opus) |
 | `/effort max` · `xhigh` · `high` · `medium` · `low` | How hard it thinks (default max) |
-| `/models` | Which GPT / Gemini / Grok models it's using |
+| `/models` | Which GPT / Gemini / Grok models it's using (`/models all` lists the choices) |
+| `/use gemini <model>` | Pick a model yourself (`/use gemini auto` = newest again) |
 
 Things to try:
 - "Research DHA Lahore 10 marla house prices this month and give me sources."

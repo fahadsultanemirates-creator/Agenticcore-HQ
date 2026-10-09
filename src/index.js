@@ -39,6 +39,8 @@ for (const [from, to] of [['CLAUDE.md', 'CLAUDE.md'], ['notes.md', 'memory/notes
 const store = makeStore(cfg.dataDir);
 const tg = makeTelegram(cfg.telegramToken);
 const providers = { openai: makeOpenAI(cfg), gemini: makeGemini(cfg), xai: makeXai(cfg) };
+const PROVIDER_ALIASES = { gpt: 'openai', openai: 'openai', chatgpt: 'openai', gemini: 'gemini', google: 'gemini', grok: 'xai', xai: 'xai' };
+for (const [k, id] of Object.entries(store.read('settings', {}).models || {})) if (providers[k]) providers[k].setModel(id);   // choices made with /use
 const usage = makeUsage(store, cfg);
 const approvals = makeApprovals(tg);
 let activeChat = cfg.ownerId;
@@ -62,13 +64,15 @@ const HELP = [
   '/budget 50 — raise today\'s Claude cap to $50',
   '/model opus | fable | sonnet — which Claude leads (now: {model})',
   '/effort low | medium | high | xhigh | max — how hard I think (now: {effort})',
-  '/models — the newest GPT / Gemini / Grok models I\'m using',
+  '/models — the GPT / Gemini / Grok models I\'m using (/models all = the choices)',
+  '/use gemini <model> — pick a model yourself (/use gemini auto = newest again)',
   '/help — this list'
 ].join('\n');
 
 async function command(chatId, text) {
   const [cmd, ...rest] = text.trim().split(/\s+/);
   const arg = rest.join(' ').toLowerCase();
+  const rawArgs = rest;
   const s = boss.settings();
   switch (cmd.toLowerCase().replace(/@.*$/, '')) {
     case '/start': case '/help':
@@ -98,12 +102,33 @@ async function command(chatId, text) {
       store.write('settings', Object.assign({}, s, { effort: arg }));
       return tg.send(chatId, '✅ Effort set to ' + arg + '.');
     case '/models': {
+      const all = arg === 'all';
       const lines = [];
       for (const p of Object.values(providers)) {
         if (!p.configured) { lines.push(p.name + ': not set up'); continue; }
-        try { lines.push(p.name + ': ' + await p.model()); } catch (e) { lines.push(p.name + ': error — ' + e.message); }
+        try {
+          lines.push(p.name + ': ' + await p.model());
+          if (all) lines.push('  choices: ' + (await p.candidates()).slice(0, 12).join(', ') + '\n');
+        } catch (e) { lines.push(p.name + ': error — ' + e.message); }
       }
-      return tg.send(chatId, 'Claude: ' + boss.modelId(s.model) + ' (effort ' + s.effort + ')\n' + lines.join('\n'));
+      return tg.send(chatId, 'Claude: ' + boss.modelId(s.model) + ' (effort ' + s.effort + ')\n' + lines.join('\n') + (all ? '\nTo pick one: /use gemini <model>' : ''));
+    }
+    case '/use': {
+      const key = PROVIDER_ALIASES[(rawArgs[0] || '').toLowerCase()];
+      const id = (rawArgs[1] || '').trim();
+      if (!key || !id) return tg.send(chatId, 'Use: /use gpt | gemini | grok <model name>, or auto for the newest. See /models all for the choices.');
+      const p = providers[key];
+      const auto = id.toLowerCase() === 'auto';
+      if (!auto) {
+        let known = [];
+        try { known = (await p.listModels()).map((m) => m.id); } catch (e) { return tg.send(chatId, p.name + ': error — ' + e.message); }
+        if (!known.includes(id)) return tg.send(chatId, p.name + ' has no model called ' + id + '. See /models all.');
+      }
+      const models = Object.assign({}, s.models || {});
+      if (auto) delete models[key]; else models[key] = id;
+      store.write('settings', Object.assign({}, s, { models }));
+      p.setModel(auto ? null : id);
+      return tg.send(chatId, '✅ ' + p.name + ' now uses ' + await p.model().catch(() => id) + '.');
     }
     default: return null;
   }
@@ -197,6 +222,7 @@ await tg.setCommands([
   { command: 'model', description: 'opus | fable | sonnet' },
   { command: 'effort', description: 'low … max' },
   { command: 'models', description: 'Which AI models are in use' },
+  { command: 'use', description: 'Pick a GPT / Gemini / Grok model' },
   { command: 'help', description: 'Help' }
 ]);
 log('AgenticCore HQ started — model ' + boss.modelId(boss.settings().model) + ', effort ' + boss.settings().effort + ', workspace ' + cfg.workspace);
