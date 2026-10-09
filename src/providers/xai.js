@@ -32,7 +32,7 @@ export function makeXai(cfg, fetchImpl = globalThis.fetch) {
     const messages = (system ? [{ role: 'system', content: system }] : []).concat([{ role: 'user', content: prompt }]);
     const base = { model: m, messages };
     const variants = [
-      { label: 'high reasoning' + (search ? ' + live search' : ''), body: Object.assign({}, base, { reasoning_effort: 'high' }, search ? { search_parameters: { mode: 'auto', return_citations: true } } : {}) },
+      { label: (cfg.xaiReasoning || 'high') + ' reasoning' + (search ? ' + live search' : ''), body: Object.assign({}, base, { reasoning_effort: cfg.xaiReasoning || 'high' }, search ? { search_parameters: { mode: 'auto', return_citations: true } } : {}) },
       search && { label: 'live search', body: Object.assign({}, base, { search_parameters: { mode: 'auto', return_citations: true } }) },
       { label: 'plain', body: base }
     ].filter(Boolean);

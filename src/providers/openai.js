@@ -39,11 +39,10 @@ export function makeOpenAI(cfg, fetchImpl = globalThis.fetch) {
     const m = await model();
     const base = { model: m, input: prompt };
     if (system) base.instructions = system;
-    const variants = [
-      { label: 'high reasoning' + (webSearch ? ' + web search' : ''), body: Object.assign({}, base, { reasoning: { effort: 'high' } }, webSearch ? { tools: [{ type: 'web_search' }] } : {}) },
-      webSearch && { label: 'web search', body: Object.assign({}, base, { tools: [{ type: 'web_search' }] }) },
-      { label: 'plain', body: base }
-    ].filter(Boolean);
+    const tools = webSearch ? { tools: [{ type: 'web_search' }] } : {};
+    const levels = [...new Set([cfg.openaiReasoning || 'xhigh', 'high'])];    // GPT-6: xhigh (Extra High), then high
+    const variants = levels.map((lvl) => ({ label: lvl + ' reasoning' + (webSearch ? ' + web search' : ''), body: Object.assign({}, base, { reasoning: { effort: lvl } }, tools) }))
+      .concat([webSearch && { label: 'web search', body: Object.assign({}, base, tools) }, { label: 'plain', body: base }].filter(Boolean));
     const r = await tryVariants(variants, async (v) => {
       const data = await http(fetchImpl, 'openai', API + '/responses', { method: 'POST', headers: auth, body: v.body, timeoutMs: 600000 });
       return { text: textOf(data), sources: sourcesOf(data), usage: data.usage || null };
