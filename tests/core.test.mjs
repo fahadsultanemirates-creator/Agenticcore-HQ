@@ -127,6 +127,13 @@ test('approvals: Allow resolves true, Deny false, timeouts deny', async () => {
   const p3 = await a.request(1, 'deploy');
   assert.equal(p3.allowed, false);
   assert.ok(sent.some((m) => /timed out/.test(m.text)));
+  const a2 = makeApprovals(tg, { timeoutMs: 5000 });
+  const p4 = a2.request(1, 'write a file');
+  await new Promise((r) => setImmediate(r));
+  assert.equal(a2.waiting, 1);
+  assert.equal(a2.answerLatest(true), true);   // typed "yes"
+  assert.equal((await p4).allowed, true);
+  assert.equal(a2.answerLatest(true), false);  // nothing left waiting
 });
 
 test('a key pasted on a model line is ignored, never shown as a model', () => {

@@ -9,7 +9,7 @@ export function makeApprovals(tg, { timeoutMs = 15 * 60000 } = {}) {
 
   async function request(chatId, what, detail) {
     const id = crypto.randomBytes(4).toString('hex');
-    const text = '🔐 Approval needed: ' + what + (detail ? '\n\n' + String(detail).slice(0, 1500) : '') + '\n\nAllow this?';
+    const text = '🔐 Approval needed: ' + what + (detail ? '\n\n' + String(detail).slice(0, 1500) : '') + '\n\nAllow this? Tap a button, or reply yes / no.';
     const msg = await tg.send(chatId, text, buttons([[['✅ Allow', 'ok:' + id], ['❌ Deny', 'no:' + id]]]));
     return new Promise((resolve) => {
       const timer = setTimeout(() => finish(id, false, 'no answer within ' + Math.round(timeoutMs / 60000) + ' minutes'), timeoutMs);
@@ -35,7 +35,13 @@ export function makeApprovals(tg, { timeoutMs = 15 * 60000 } = {}) {
     return finish(m[2], m[1] === 'ok') ? (m[1] === 'ok' ? 'Allowed' : 'Denied') : 'Already answered';
   }
 
+  // A typed "yes" / "no" answers the newest waiting request (in case the buttons are not visible).
+  function answerLatest(allowed) {
+    const ids = [...pending.keys()];
+    return ids.length ? finish(ids[ids.length - 1], allowed) : false;
+  }
+
   function cancelAll() { for (const id of [...pending.keys()]) finish(id, false); }
 
-  return { request, handle, cancelAll, get waiting() { return pending.size; } };
+  return { request, handle, answerLatest, cancelAll, get waiting() { return pending.size; } };
 }

@@ -150,6 +150,13 @@ async function onMessage(msg) {
   activeChat = chatId;
   if (msg.text && msg.text.startsWith('/')) { const handled = await command(chatId, msg.text); if (handled !== null) return; }
 
+  if (approvals.waiting && msg.text) {
+    const t = msg.text.trim().toLowerCase().replace(/[.!]+$/, '');
+    const yes = /^(yes|y|allow|ok|okay|haan|han|ji|jee|ha|go ahead|approve|approved)$/.test(t);
+    const no = /^(no|n|deny|nahi|nahin|na|stop|reject)$/.test(t);
+    if ((yes || no) && approvals.answerLatest(yes)) return tg.send(chatId, yes ? '✅ Allowed.' : '❌ Denied.');
+  }
+
   let prompt = msg.text || msg.caption || '';
   if (msg.voice || msg.audio) {
     if (!providers.xai.configured) return tg.send(chatId, 'Voice notes need the xAI key on the VPS. Please type for now.');
