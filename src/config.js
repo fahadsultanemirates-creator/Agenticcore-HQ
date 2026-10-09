@@ -31,8 +31,12 @@ export function loadEnvFile(file = path.join(ROOT, '.env')) {
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const num = (v, d) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : d; };
 
+// A key pasted on a model line by mistake must never be used or shown as a model name.
+const LOOKS_LIKE_KEY = /^(sk-|xai-|AIza|ghp_|github_pat_)|^\d{6,}:/;
+
 export function readConfig(env = process.env) {
   const e = (k, d = '') => String(env[k] ?? d).trim() || d;
+  const m = (k, d = '') => (LOOKS_LIKE_KEY.test(e(k)) ? d : e(k, d));
   const workspace = e('HQ_WORKSPACE', path.join(ROOT, 'workspace'));
   return {
     telegramToken: e('TELEGRAM_BOT_TOKEN'),
@@ -41,10 +45,10 @@ export function readConfig(env = process.env) {
     model: e('HQ_MODEL', 'claude-opus-5-5'),
     modelHard: e('HQ_MODEL_HARD', 'claude-fable-5-1'),
     effort: EFFORTS.includes(e('HQ_EFFORT')) ? e('HQ_EFFORT') : 'max',
-    openaiKey: e('OPENAI_API_KEY'), openaiModel: e('OPENAI_MODEL'), openaiImageModel: e('OPENAI_IMAGE_MODEL', 'gpt-image-1'),
-    geminiKey: e('GEMINI_API_KEY'), geminiModel: e('GEMINI_MODEL'),
-    xaiKey: e('XAI_API_KEY'), xaiModel: e('XAI_MODEL'),
-    xaiImageModel: e('XAI_IMAGE_MODEL', 'grok-imagine-image-2.0'), xaiVideoModel: e('XAI_VIDEO_MODEL', 'grok-imagine-video-1.5'),
+    openaiKey: e('OPENAI_API_KEY'), openaiModel: m('OPENAI_MODEL'), openaiImageModel: m('OPENAI_IMAGE_MODEL', 'gpt-image-1'),
+    geminiKey: e('GEMINI_API_KEY'), geminiModel: m('GEMINI_MODEL'),
+    xaiKey: e('XAI_API_KEY'), xaiModel: m('XAI_MODEL'),
+    xaiImageModel: m('XAI_IMAGE_MODEL', 'grok-imagine-image-2.0'), xaiVideoModel: m('XAI_VIDEO_MODEL', 'grok-imagine-video-1.5'),
     openaiReasoning: e('OPENAI_REASONING', 'xhigh'), geminiThinking: e('GEMINI_THINKING', 'high'), xaiReasoning: e('XAI_REASONING', 'high'),
     voiceUr: e('VOICE_UR', 'naksh'), voiceEn: e('VOICE_EN', 'orion'),
     ghToken: e('GH_TOKEN'),
