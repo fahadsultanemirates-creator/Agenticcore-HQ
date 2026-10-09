@@ -52,6 +52,10 @@ export function readConfig(env = process.env) {
     openaiReasoning: e('OPENAI_REASONING', 'xhigh'), geminiThinking: e('GEMINI_THINKING', 'high'), xaiReasoning: e('XAI_REASONING', 'high'),
     voiceUr: e('VOICE_UR', 'naksh'), voiceEn: e('VOICE_EN', 'orion'),
     ghToken: e('GH_TOKEN'),
+    netlifyToken: e('NETLIFY_TOKEN'),
+    supabase: [1, 2, 3].map((n) => ({ n, token: e('SUPABASE_TOKEN_' + n), label: e('SUPABASE_LABEL_' + n) })).filter((a) => a.token),
+    // The AgenticCore Edge window (scripts/stage2.ps1); HQ_BROWSER_CDP=off turns the browser tools off.
+    browserCdp: e('HQ_BROWSER_CDP', 'http://127.0.0.1:9222') === 'off' ? '' : e('HQ_BROWSER_CDP', 'http://127.0.0.1:9222'),
     dailyBudget: num(env.DAILY_BUDGET_USD, 30),
     jobBudget: num(env.JOB_BUDGET_USD, 8),
     workspace,
