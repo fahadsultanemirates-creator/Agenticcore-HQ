@@ -42,6 +42,8 @@ export function makeBoss(deps) {
 
   function options(chatId, sessionId, abort) {
     const s = settings();
+    const okFiles = new Set();   // files Fahad allowed in this job: later edits of the same file do not ask again
+    const fileKey = (input) => (input.file_path ? String(input.file_path).replace(/\//g, '\\').toLowerCase() : '');
     return {
       model: modelId(s.model),
       fallbackModel: s.model === 'opus' ? undefined : cfg.model,
@@ -57,8 +59,11 @@ export function makeBoss(deps) {
         const c = classify(toolName, input, { workspace: cfg.workspace });
         if (c.decision === 'allow') return { behavior: 'allow', updatedInput: input };
         if (c.decision === 'deny') return { behavior: 'deny', message: 'Not allowed: ' + c.reason + '.' };
-        const detail = input.command ? String(input.command) : input.file_path ? String(input.file_path) : '';
+        const key = fileKey(input);
+        if (key && okFiles.has(key)) return { behavior: 'allow', updatedInput: input };
+        const detail = input.command ? String(input.command) : (key ? 'Later changes to this same file in this job will not ask again.' : '');
         const r = await approvals.request(chatId, c.reason, detail);
+        if (r.allowed && key) okFiles.add(key);
         return r.allowed ? { behavior: 'allow', updatedInput: input } : { behavior: 'deny', message: 'Fahad did not approve this (' + (r.note || 'denied') + '). Do not try to do it another way; tell him what you would need.' };
       },
       resume: sessionId || undefined,
