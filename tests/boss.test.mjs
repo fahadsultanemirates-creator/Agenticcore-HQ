@@ -105,7 +105,9 @@ test('an engine error after the result keeps the clear message (e.g. a wrong API
 
 test('progress descriptions are readable', () => {
   assert.equal(describeTool('mcp__hq__ask_gemini', {}), 'researching with Gemini');
-  assert.equal(describeTool('Bash', { command: 'npm test\nmore' }), 'running: npm test');
+  assert.equal(describeTool('Bash', { command: 'npm test\nmore' }), 'running a script');
+  assert.equal(describeTool('Bash', { command: 'curl -A "Mozilla/5.0" https://zameen.com', description: 'Check a source page' }), 'Check a source page');
+  assert.equal(describeTool('PowerShell', { command: '$UA="Mozilla/5.0"; Invoke-WebRequest https://x.pk -UserAgent $UA' }), 'reading a web page');
   assert.equal(describeTool('Task', { subagent_type: 'researcher', description: 'DHA price trends' }), 'researcher: DHA price trends');
 });
 
