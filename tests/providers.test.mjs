@@ -29,6 +29,21 @@ test('version parsing picks the newest family member', () => {
   assert.deepEqual(versionOf('grok-4-0709'), [4]);
 });
 
+test('model choice: 4.7 is newer than 4.20, stable before preview, no non-reasoning Grok', async () => {
+  const x = makeXai(cfg, fakeFetch([['/models', () => json(200, { data: [{ id: 'grok-4.20-0309-non-reasoning' }, { id: 'grok-4.20-0309-reasoning' }, { id: 'grok-4.7' }, { id: 'grok-4-1-fast-reasoning' }] })]]));
+  assert.equal(await x.model(), 'grok-4.7');
+  assert.deepEqual(await x.candidates(), ['grok-4.7', 'grok-4.20-0309-reasoning']);
+  const g = makeGemini(cfg, fakeFetch([['/models?', () => json(200, { models: ['gemini-3.1-pro-preview', 'gemini-3.1-pro', 'gemini-2.5-pro'].map((id) => ({ name: 'models/' + id, supportedGenerationMethods: ['generateContent'] })) })]]));
+  assert.equal(await g.model(), 'gemini-3.1-pro');
+  g.setModel('gemini-2.5-pro'); assert.equal(await g.model(), 'gemini-2.5-pro');
+  g.setModel(null); assert.equal(await g.model(), 'gemini-3.1-pro');
+});
+
+test('OpenAI: an OpenRouter key gets a clear message', async () => {
+  const o = makeOpenAI(Object.assign({}, cfg, { openaiKey: 'sk-or-v1-abc' }), fakeFetch([]));
+  await assert.rejects(o.model(), /OpenRouter key/);
+});
+
 test('OpenAI: newest flagship model, Extra High reasoning + web search, sources', async () => {
   const f = fakeFetch([
     ['/models', () => json(200, { data: [{ id: 'gpt-5', created: 1 }, { id: 'gpt-6', created: 3 }, { id: 'gpt-6-mini', created: 4 }, { id: 'gpt-image-1', created: 5 }, { id: 'gpt-4o', created: 2 }] })],

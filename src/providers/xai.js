@@ -7,7 +7,7 @@ import { http, tryVariants, newerFirst } from './http.js';
 import { devanagariToUrdu } from './urdu-script.js';
 
 const API = 'https://api.x.ai/v1';
-const SKIP = /imagine|image|video|vision|mini|tts|stt|embed|beta/i;
+const SKIP = /imagine|image|video|vision|mini|tts|stt|embed|beta|non-reasoning|fast|code/i;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function makeXai(cfg, fetchImpl = globalThis.fetch) {
@@ -20,12 +20,15 @@ export function makeXai(cfg, fetchImpl = globalThis.fetch) {
     return (data.data || []).map((m) => ({ id: m.id, created: m.created || 0 }));
   }
   // Newest Grok text model (e.g. grok-4.7), unless XAI_MODEL is set.
+  async function candidates() {
+    return (await listModels()).filter((m) => /^grok-\d/.test(m.id) && !SKIP.test(m.id)).sort(newerFirst).map((m) => m.id);
+  }
   async function model() {
     if (chosen) return chosen;
-    const list = (await listModels()).filter((m) => /^grok-\d/.test(m.id) && !SKIP.test(m.id)).sort(newerFirst);
-    chosen = (list[0] && list[0].id) || 'grok-4';
+    chosen = (await candidates())[0] || 'grok-4';
     return chosen;
   }
+  const setModel = (id) => { chosen = id || cfg.xaiModel || null; };
 
   async function ask({ prompt, system, search = false }) {
     const m = await model();
@@ -92,5 +95,5 @@ export function makeXai(cfg, fetchImpl = globalThis.fetch) {
     return devanagariToUrdu(text);
   }
 
-  return { name: 'xai', configured: Boolean(key), listModels, model, ask, image, video, speak, transcribe };
+  return { name: 'xai', configured: Boolean(key), listModels, candidates, model, setModel, ask, image, video, speak, transcribe };
 }
