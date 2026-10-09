@@ -21,7 +21,7 @@ function setup({ results, onOptions, approve = true, budget = 30 } = {}) {
   const usage = makeUsage(store, cfg);
   const sent = [];
   const tg = { send: async (chat, text) => { sent.push(text); return { message_id: 1 }; }, typing: () => null };
-  const approvals = { request: async () => ({ allowed: approve }), cancelAll: () => null };
+  const approvals = { asked: 0, request: async () => { approvals.asked++; return { allowed: approve }; }, cancelAll: () => null };
   let i = 0;
   const queryFn = ({ prompt, options }) => {
     if (onOptions) onOptions(options, prompt);
@@ -33,6 +33,7 @@ function setup({ results, onOptions, approve = true, budget = 30 } = {}) {
     })();
   };
   const boss = makeBoss({ cfg, tg, store, usage, approvals, hqServer: {}, log: () => null, queryFn });
+  setup.lastApprovals = approvals;
   return { boss, sent, store, usage, cfg };
 }
 
@@ -68,6 +69,19 @@ test('risky tools wait for approval; denied ones are refused; keys are never rea
   const push = await opts.canUseTool('Bash', { command: 'git push origin main' });
   assert.equal(push.behavior, 'deny'); assert.match(push.message, /did not approve/);
   assert.equal((await opts.canUseTool('Read', { file_path: 'C:\\AgenticCoreHQ\\.env' })).behavior, 'deny');
+});
+
+test('an allowed file outside the workspace does not ask again in the same job', async () => {
+  let opts;
+  const { boss } = setup({ results: [{ result: 'ok' }], onOptions: (o) => (opts = o) });
+  const approvals = setup.lastApprovals;
+  boss.enqueue({ chatId: '7', prompt: 'x' }); await tick();
+  assert.equal((await opts.canUseTool('Write', { file_path: '/elsewhere/tmp/make-post.ps1', content: 'a' })).behavior, 'allow');
+  assert.equal(approvals.asked, 1);
+  assert.equal((await opts.canUseTool('Edit', { file_path: '\\elsewhere\\tmp\\make-post.ps1', old_string: 'a', new_string: 'b' })).behavior, 'allow');
+  assert.equal(approvals.asked, 1);   // same file: not asked again
+  await opts.canUseTool('Write', { file_path: '/elsewhere/other.txt', content: 'c' });
+  assert.equal(approvals.asked, 2);   // a different file still asks
 });
 
 test('budget: a used-up day stops before running; a job that hits its limit says how to continue', async () => {
