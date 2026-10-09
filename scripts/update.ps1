@@ -3,6 +3,8 @@
 $ErrorActionPreference = 'Stop'
 $Dir = Split-Path -Parent $PSScriptRoot
 Set-Location $Dir
+# Pick up Node/Git even in a window opened before they were installed.
+$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
 git pull --ff-only
 npm install --omit=dev --no-audit --no-fund | Out-Host
 Stop-ScheduledTask -TaskName 'AgenticCore HQ' -ErrorAction SilentlyContinue
