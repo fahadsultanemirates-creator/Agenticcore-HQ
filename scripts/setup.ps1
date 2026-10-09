@@ -13,13 +13,52 @@ Write-Host "`n=== AgenticCore HQ setup ($Dir) ===`n" -ForegroundColor Green
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) { Write-Host 'Please run PowerShell as Administrator (right-click > Run as administrator).' -ForegroundColor Red; exit 1 }
 
-function Refresh-Path { $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') }
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# Full search path (machine + user), so winget and freshly installed tools are found
+function Refresh-Path {
+  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps')
+}
+Refresh-Path
+
+function Install-Msi($url, $file) {
+  $out = Join-Path $env:TEMP $file
+  Write-Host "  downloading $url"
+  Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
+  Start-Process msiexec.exe -ArgumentList "/i `"$out`" /qn /norestart" -Wait
+}
+# Direct downloads, used when winget is missing or fails
+$Direct = @{
+  node = {
+    $lts = (Invoke-RestMethod 'https://nodejs.org/dist/index.json') | Where-Object { $_.lts } | Select-Object -First 1
+    Install-Msi "https://nodejs.org/dist/$($lts.version)/node-$($lts.version)-x64.msi" 'node-lts.msi'
+  }
+  git = {
+    $rel = Invoke-RestMethod 'https://api.github.com/repos/git-for-windows/git/releases/latest'
+    $asset = $rel.assets | Where-Object { $_.name -like 'Git-*-64-bit.exe' } | Select-Object -First 1
+    $out = Join-Path $env:TEMP 'git-setup.exe'
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $out -UseBasicParsing
+    Start-Process $out -ArgumentList '/VERYSILENT /NORESTART' -Wait
+  }
+  gh = {
+    $rel = Invoke-RestMethod 'https://api.github.com/repos/cli/cli/releases/latest'
+    $asset = $rel.assets | Where-Object { $_.name -like '*windows_amd64.msi' } | Select-Object -First 1
+    Install-Msi $asset.browser_download_url 'gh.msi'
+  }
+}
 function Ensure($cmd, $id, $name) {
   if (Get-Command $cmd -ErrorAction SilentlyContinue) { Write-Host "OK  $name"; return }
   Write-Host "Installing $name ..."
-  winget install --id $id -e --scope machine --accept-source-agreements --accept-package-agreements | Out-Host
-  Refresh-Path
-  if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) { throw "$name did not install. Install it manually, then run this again." }
+  if (Get-Command winget -ErrorAction SilentlyContinue) {
+    winget install --id $id -e --scope machine --accept-source-agreements --accept-package-agreements | Out-Host
+    Refresh-Path
+  }
+  if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
+    Write-Host "  winget not available or it did not work - downloading $name directly"
+    & $Direct[$cmd]
+    Refresh-Path
+  }
+  if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) { throw "$name did not install. Close PowerShell, open it again as Administrator, and run this setup again." }
+  Write-Host "OK  $name"
 }
 Ensure node 'OpenJS.NodeJS.LTS' 'Node.js'
 Ensure git 'Git.Git' 'Git'
@@ -56,6 +95,7 @@ if (-not $keep) {
     'HQ_MODEL=claude-opus-5-5', 'HQ_MODEL_HARD=claude-fable-5-1', 'HQ_EFFORT=max',
     "OPENAI_API_KEY=$oai", "GEMINI_API_KEY=$gem", "XAI_API_KEY=$xai",
     'OPENAI_MODEL=', 'GEMINI_MODEL=', 'XAI_MODEL=',
+    'OPENAI_REASONING=xhigh', 'GEMINI_THINKING=high', 'XAI_REASONING=high',
     'VOICE_UR=naksh', 'VOICE_EN=orion',
     "GH_TOKEN=$gh", "DAILY_BUDGET_USD=$budget", 'JOB_BUDGET_USD=8',
     "HQ_WORKSPACE=$Dir\workspace"

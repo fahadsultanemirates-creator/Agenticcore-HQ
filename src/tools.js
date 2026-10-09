@@ -58,7 +58,7 @@ export function hqTools(deps) {
         return ok('voice message sent');
       })),
 
-    tool('ask_gpt', 'Ask OpenAI\'s newest GPT model (high reasoning). Strong for social-media campaigns, ad copy, hooks, content calendars and a second opinion. Set web_search for anything current. Give it full context — it cannot see this conversation.',
+    tool('ask_gpt', 'Ask OpenAI\'s newest GPT model (GPT-6, Extra High reasoning). Strong for social-media campaigns, ad copy, hooks, content calendars and a second opinion. Set web_search for anything current. Give it full context — it cannot see this conversation.',
       { prompt: z.string().min(1), system: z.string().optional(), web_search: z.boolean().optional() },
       guarded(async ({ prompt, system, web_search }) => {
         need(providers.openai);

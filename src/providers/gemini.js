@@ -31,7 +31,7 @@ export function makeGemini(cfg, fetchImpl = globalThis.fetch) {
     if (system) base.systemInstruction = { parts: [{ text: system }] };
     const tools = search ? { tools: [{ google_search: {} }] } : {};
     const variants = [
-      { label: 'high thinking' + (search ? ' + Google Search' : ''), body: Object.assign({}, base, tools, { generationConfig: { thinkingConfig: { thinkingLevel: 'high' } } }) },
+      { label: (cfg.geminiThinking || 'high') + ' thinking' + (search ? ' + Google Search' : ''), body: Object.assign({}, base, tools, { generationConfig: { thinkingConfig: { thinkingLevel: cfg.geminiThinking || 'high' } } }) },
       { label: search ? 'Google Search' : 'plain', body: Object.assign({}, base, tools) },
       search && { label: 'plain', body: base }
     ].filter(Boolean);

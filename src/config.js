@@ -45,6 +45,7 @@ export function readConfig(env = process.env) {
     geminiKey: e('GEMINI_API_KEY'), geminiModel: e('GEMINI_MODEL'),
     xaiKey: e('XAI_API_KEY'), xaiModel: e('XAI_MODEL'),
     xaiImageModel: e('XAI_IMAGE_MODEL', 'grok-imagine-image-2.0'), xaiVideoModel: e('XAI_VIDEO_MODEL', 'grok-imagine-video-1.5'),
+    openaiReasoning: e('OPENAI_REASONING', 'xhigh'), geminiThinking: e('GEMINI_THINKING', 'high'), xaiReasoning: e('XAI_REASONING', 'high'),
     voiceUr: e('VOICE_UR', 'naksh'), voiceEn: e('VOICE_EN', 'orion'),
     ghToken: e('GH_TOKEN'),
     dailyBudget: num(env.DAILY_BUDGET_USD, 30),

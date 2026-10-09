@@ -22,7 +22,7 @@ Fahad's personal AI team on Telegram, running on his own Windows VPS.
 2. Install Git and download HQ. Sign in to GitHub in the browser window if asked:
    ```powershell
    winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements
-   $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine')
+   $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')
    git clone https://github.com/fahadsultanemirates-creator/agenticcore-hq C:\AgenticCoreHQ
    ```
 3. Run the setup:

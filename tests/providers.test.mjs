@@ -29,7 +29,7 @@ test('version parsing picks the newest family member', () => {
   assert.deepEqual(versionOf('grok-4-0709'), [4]);
 });
 
-test('OpenAI: newest flagship model, high reasoning + web search, sources', async () => {
+test('OpenAI: newest flagship model, Extra High reasoning + web search, sources', async () => {
   const f = fakeFetch([
     ['/models', () => json(200, { data: [{ id: 'gpt-5', created: 1 }, { id: 'gpt-6', created: 3 }, { id: 'gpt-6-mini', created: 4 }, { id: 'gpt-image-1', created: 5 }, { id: 'gpt-4o', created: 2 }] })],
     ['/responses', () => json(200, { output: [{ type: 'message', content: [{ type: 'output_text', text: 'Campaign plan', annotations: [{ type: 'url_citation', url: 'https://a.pk', title: 'A' }] }] }] })]
@@ -40,7 +40,7 @@ test('OpenAI: newest flagship model, high reasoning + web search, sources', asyn
   assert.equal(r.text, 'Campaign plan');
   assert.deepEqual(r.sources, [{ title: 'A', url: 'https://a.pk' }]);
   const sent = f.calls.find((c) => c.url.endsWith('/responses')).body;
-  assert.deepEqual(sent.reasoning, { effort: 'high' });
+  assert.deepEqual(sent.reasoning, { effort: 'xhigh' });   // GPT-6 Extra High
   assert.deepEqual(sent.tools, [{ type: 'web_search' }]);
   assert.equal(sent.instructions, 'be brief');
 });
@@ -50,7 +50,11 @@ test('OpenAI: a rejected setting falls back to a simpler request; auth errors st
   const f = fakeFetch([['/responses', (body) => { n++; return body.reasoning ? json(400, { error: { message: 'reasoning not supported' } }) : json(200, { output_text: 'ok' }); }]]);
   const o = makeOpenAI(Object.assign({}, cfg, { openaiModel: 'gpt-x' }), f);
   const r = await o.ask({ prompt: 'p', webSearch: true });
-  assert.equal(r.text, 'ok'); assert.equal(r.variant, 'web search'); assert.equal(n, 2);
+  assert.equal(r.text, 'ok'); assert.equal(r.variant, 'web search'); assert.equal(n, 3);   // xhigh, high, then without reasoning
+  const tried = [];
+  const steps = makeOpenAI(Object.assign({}, cfg, { openaiModel: 'gpt-x' }), fakeFetch([['/responses', (b) => { tried.push(b.reasoning && b.reasoning.effort); return b.reasoning && b.reasoning.effort === 'xhigh' ? json(400, { error: { message: 'unsupported value' } }) : json(200, { output_text: 'deep' }); }]]));
+  assert.equal((await steps.ask({ prompt: 'p' })).variant, 'high reasoning');
+  assert.deepEqual(tried, ['xhigh', 'high']);
   const bad = makeOpenAI(Object.assign({}, cfg, { openaiModel: 'gpt-x' }), fakeFetch([['/responses', () => json(401, { error: { message: 'bad key' } })]]));
   await assert.rejects(bad.ask({ prompt: 'p' }), /openai 401: bad key/);
 });
