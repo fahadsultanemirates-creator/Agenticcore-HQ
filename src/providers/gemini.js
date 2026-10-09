@@ -17,13 +17,16 @@ export function makeGemini(cfg, fetchImpl = globalThis.fetch) {
       .map((m) => ({ id: String(m.name).replace(/^models\//, ''), created: 0 }));
   }
   // Newest "pro" model (e.g. gemini-3.8-pro), else the newest at all.
+  async function candidates() {
+    const list = (await listModels()).filter((m) => /^gemini-\d/.test(m.id) && !SKIP.test(m.id)).sort(newerFirst).map((m) => m.id);
+    return list.filter((id) => /pro/.test(id)).concat(list.filter((id) => !/pro/.test(id)));   // pro models first
+  }
   async function model() {
     if (chosen) return chosen;
-    const list = (await listModels()).filter((m) => /^gemini-\d/.test(m.id) && !SKIP.test(m.id)).sort(newerFirst);
-    const pro = list.find((m) => /pro/.test(m.id));
-    chosen = ((pro || list[0]) && (pro || list[0]).id) || 'gemini-2.5-pro';
+    chosen = (await candidates())[0] || 'gemini-2.5-pro';
     return chosen;
   }
+  const setModel = (id) => { chosen = id || cfg.geminiModel || null; };
 
   async function ask({ prompt, system, search = true }) {
     const m = await model();
@@ -46,5 +49,5 @@ export function makeGemini(cfg, fetchImpl = globalThis.fetch) {
     return Object.assign(r, { model: m });
   }
 
-  return { name: 'gemini', configured: Boolean(key), listModels, model, ask };
+  return { name: 'gemini', configured: Boolean(key), listModels, candidates, model, setModel, ask };
 }

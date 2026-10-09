@@ -47,8 +47,17 @@ export function versionOf(id) {
   const m = String(id).match(/(\d+(?:\.\d+)*)/);
   return m ? m[1].split('.').map(Number).slice(0, 3) : [0];
 }
+// The minor part is compared as a decimal, the way model names are read:
+// grok-4.7 is newer than grok-4.20 (4.7 > 4.2).
+function versionNum(id) {
+  const m = String(id).match(/(\d+)(?:\.(\d+))?/);
+  return m ? Number(m[1]) + (m[2] ? Number('0.' + m[2]) : 0) : 0;
+}
+const UNSTABLE = /preview|exp|beta/i;
 export function newerFirst(a, b) {
-  const va = versionOf(a.id), vb = versionOf(b.id);
-  for (let i = 0; i < 3; i++) { const d = (vb[i] || 0) - (va[i] || 0); if (d) return d; }
+  const d = versionNum(b.id) - versionNum(a.id);
+  if (d) return d;
+  const u = (UNSTABLE.test(a.id) ? 1 : 0) - (UNSTABLE.test(b.id) ? 1 : 0);   // a stable release before its preview
+  if (u) return u;
   return (b.created || 0) - (a.created || 0);
 }

@@ -15,12 +15,19 @@ export function makeOpenAI(cfg, fetchImpl = globalThis.fetch) {
     return (data.data || []).map((m) => ({ id: m.id, created: m.created || 0 }));
   }
   // Newest flagship text model (e.g. gpt-6 over gpt-5), unless OPENAI_MODEL is set.
+  const wrongKey = () => {
+    if (/^sk-or-/.test(key)) throw new Error('this is an OpenRouter key (sk-or-…), not an OpenAI key. Make one at platform.openai.com → API keys and put it in .env as OPENAI_API_KEY');
+  };
+  async function candidates() {
+    wrongKey();
+    return (await listModels()).filter((m) => /^(gpt-\d|o\d)/.test(m.id) && !SKIP.test(m.id)).sort(newerFirst).map((m) => m.id);
+  }
   async function model() {
     if (chosen) return chosen;
-    const list = (await listModels()).filter((m) => /^(gpt-\d|o\d)/.test(m.id) && !SKIP.test(m.id)).sort(newerFirst);
-    chosen = (list[0] && list[0].id) || 'gpt-5';
+    chosen = (await candidates())[0] || 'gpt-5';
     return chosen;
   }
+  const setModel = (id) => { chosen = id || cfg.openaiModel || null; };
 
   function textOf(data) {
     if (typeof data.output_text === 'string' && data.output_text) return data.output_text;
@@ -36,6 +43,7 @@ export function makeOpenAI(cfg, fetchImpl = globalThis.fetch) {
   }
 
   async function ask({ prompt, system, webSearch = false }) {
+    wrongKey();
     const m = await model();
     const base = { model: m, input: prompt };
     if (system) base.instructions = system;
@@ -59,5 +67,5 @@ export function makeOpenAI(cfg, fetchImpl = globalThis.fetch) {
     return (data.data || []).map((d) => d.b64_json ? Buffer.from(d.b64_json, 'base64') : null).filter(Boolean);
   }
 
-  return { name: 'openai', configured: Boolean(key), listModels, model, ask, image };
+  return { name: 'openai', configured: Boolean(key), listModels, candidates, model, setModel, ask, image };
 }
