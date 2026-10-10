@@ -150,3 +150,17 @@ test('Windows scripts are plain ASCII (Windows PowerShell 5 misreads long dashes
     assert.equal(bad, -1, f + ' line ' + (bad + 1) + ' has a non-ASCII character');
   }
 });
+
+test('telegram: links become clickable names, bold and code kept, the rest escaped; plain text if Telegram rejects it', async () => {
+  const { toTelegramHtml } = await import('../src/telegram.js');
+  assert.equal(toTelegramHtml('[Dawn, 6 Oct](https://www.dawn.com/news/1?a=1&b=2) said <b> & **big** news, run `npm test`'),
+    '<a href="https://www.dawn.com/news/1?a=1&amp;b=2">Dawn, 6 Oct</a> said &lt;b&gt; &amp; <b>big</b> news, run <code>npm test</code>');
+  assert.equal(toTelegramHtml('[x](javascript:alert(1))'), '[x](javascript:alert(1))');
+  const calls = [];
+  const tg = makeTelegram('T', async (url, o) => { const b = JSON.parse(o.body); calls.push(b); return { json: async () => (b.parse_mode ? { ok: false, description: "Bad Request: can't parse entities" } : { ok: true, result: { message_id: 3 } }) }; });
+  const r = await tg.send(1, 'hi **there**');
+  assert.equal(r.message_id, 3);
+  assert.equal(calls[0].parse_mode, 'HTML');
+  assert.equal(calls[1].text, 'hi **there**');
+  assert.equal(calls[1].parse_mode, undefined);
+});
