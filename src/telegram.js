@@ -24,6 +24,16 @@ export function chunkText(text, size = LIMIT) {
   return out;
 }
 
+// Claude writes light Markdown; Telegram shows it as HTML: [name](https://…) becomes a
+// clickable name, **bold** and `code` are kept, everything else is escaped.
+export function toTelegramHtml(text) {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return esc(String(text ?? ''))
+    .replace(/\[([^\]\n]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, (m, name, url) => '<a href="' + url.replace(/"/g, '%22') + '">' + name + '</a>')
+    .replace(/\*\*([^*\n]{1,300})\*\*/g, '<b>$1</b>')
+    .replace(/`([^`\n]{1,300})`/g, '<code>$1</code>');
+}
+
 export function buttons(rows) {
   return { reply_markup: { inline_keyboard: rows.map((r) => r.map(([text, data]) => ({ text, callback_data: data }))) } };
 }
@@ -63,7 +73,14 @@ export function makeTelegram(token, fetchImpl = globalThis.fetch) {
     let last = null;
     for (let i = 0; i < parts.length; i++) {
       const isLast = i === parts.length - 1;
-      last = await call('sendMessage', Object.assign({ chat_id: chatId, text: parts[i], link_preview_options: { is_disabled: true } }, isLast ? extra : {}));
+      const base = { chat_id: chatId, link_preview_options: { is_disabled: true } };
+      const more = isLast ? extra : {};
+      try {
+        last = await call('sendMessage', Object.assign({}, base, { text: toTelegramHtml(parts[i]), parse_mode: 'HTML' }, more));
+      } catch (e) {
+        if (!/parse|entit|tag/i.test(String(e.message))) throw e;   // formatting Telegram rejects: send it plain instead
+        last = await call('sendMessage', Object.assign({}, base, { text: parts[i] }, more));
+      }
     }
     return last;
   }
