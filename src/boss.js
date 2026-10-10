@@ -65,7 +65,7 @@ export function makeBoss(deps) {
       agents: Object.fromEntries(Object.entries(SPECIALISTS).map(([k, a]) => [k, Object.assign({ model: modelId('opus'), mcpServers: ['hq'].concat(Object.keys(external)) }, a)])),
       permissionMode: 'default',
       canUseTool: async (toolName, input) => {
-        const c = classify(toolName, input, { workspace: cfg.workspace });
+        const c = classify(toolName, input, { workspace: cfg.workspace, blocked: deps.blockedIds ? deps.blockedIds() : [] });
         if (c.decision === 'allow') return { behavior: 'allow', updatedInput: input };
         if (c.decision === 'deny') return { behavior: 'deny', message: 'Not allowed: ' + c.reason + '.' };
         const key = fileKey(input);
