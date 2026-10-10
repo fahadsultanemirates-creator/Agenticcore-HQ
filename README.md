@@ -42,6 +42,23 @@ Fahad's personal AI team on Telegram, running on his own Windows VPS.
 
 HQ runs in the background and starts by itself whenever the VPS restarts.
 
+## Stage 2: browser, Facebook, WhatsApp, Buffer, Netlify, Supabase, video
+
+Run once, connected to the VPS with Remote Desktop, in PowerShell as Administrator (after `update.ps1`):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\stage2.ps1
+```
+
+It:
+1. Installs **ffmpeg** (the video tool) in `C:\AgenticCoreHQ\tools\ffmpeg`.
+2. Asks for your **Netlify** token and up to **3 Supabase** tokens, each with a name like "Estate + PK". You type these on the VPS only.
+3. Sets up the **AgenticCore browser**: an Edge window with its own profile. It starts whenever you log in to the VPS, and the bot drives it through a local-only connection. Files downloaded there go to `workspace\downloads`.
+4. Opens Facebook, WhatsApp Web, Buffer, Netlify and Supabase in that window. **Log in to each once.**
+5. Restarts the bot.
+
+Keep that Edge window open; minimising it is fine. Close Remote Desktop with the **X**, never **Sign out**. After a VPS restart, connect with Remote Desktop once so the browser starts again. `/browser` in Telegram tells you whether it's running.
+
 ## Using it
 
 Just talk to it: text or voice notes, in English, Urdu or Roman Urdu. Send photos or files and it saves them to its workspace.
@@ -57,6 +74,8 @@ Just talk to it: text or voice notes, in English, Urdu or Roman Urdu. Send photo
 | `/effort max` · `xhigh` · `high` · `medium` · `low` | How hard it thinks (default max) |
 | `/models` | Which GPT / Gemini / Grok models it's using (`/models all` lists the choices) |
 | `/use gemini <model>` | Pick a model yourself (`/use gemini auto` = newest again) |
+| `/bigjob 40` | The next job may spend up to $40 (long campaigns, new projects) |
+| `/browser` | Is the AgenticCore browser running? |
 
 Things to try:
 - "Research DHA Lahore 10 marla house prices this month and give me sources."
@@ -64,10 +83,21 @@ Things to try:
 - "Make 3 flyer designs for a 5 marla house in Bahria Town, compare Grok and OpenAI."
 - "Every morning at 9, check open pull requests on both sites and tell me."
 - "Is waqt kya ho raha hai? Bol kar batao." (voice reply)
+- "Search Facebook groups for 10 marla plots in DHA Lahore posted this week and make me a list."
+- "Join these 3 clips in order into one 45-second Reel and add the logo at the end."
+- "Sign up on agenticcore.estate as a test user, list a test property, and tell me what breaks."
+- "Schedule this image with this caption on Buffer for Friday 7pm." 
 
 ## Good to know
 
-- **Approvals:** when HQ wants to push code, merge, deploy, delete files or change live data, you get a message with ✅ Allow / ❌ Deny. No answer within 15 minutes means no.
+- **Approvals:** you get a message with ✅ Allow / ❌ Deny (or reply yes / no) when HQ wants to:
+  - push code, merge, deploy, delete files or change live data;
+  - change anything on Netlify or Supabase, or run SQL that writes;
+  - click Post / Publish / Schedule / Send / Delete / Pay in the browser, or send a comment or message;
+  - publish anything, message anyone other than you, or create a new account, project or repository.
+
+  No answer within 15 minutes means no. The Agenticcore-token project is always off limits.
+- **Big files:** Telegram bots can't take files over 20 MB. Send big videos to yourself on WhatsApp ("Message yourself") and tell HQ to take them from WhatsApp Web.
 - **Memory:** `workspace\CLAUDE.md` (your profile, projects and rules) and `workspace\memory\notes.md` (what it learns) are read at the start of every conversation. Say "remember that…" to add to it.
 - **Spending:**
   - Claude's cost is tracked per job, with a cap per job (`JOB_BUDGET_USD`, $8 by default) and per day (`DAILY_BUDGET_USD`).

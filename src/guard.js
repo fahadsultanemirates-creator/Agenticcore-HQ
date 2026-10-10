@@ -43,9 +43,56 @@ const inside = (file, dir) => {
   return rel && !rel.startsWith('..') && !path.isAbsolute(rel);
 };
 
+// Browser clicks that publish, send, pay or delete something.
+const PUBLIC_CLICK = /\b(post|publish|share|schedule|send|delete|remove|pay|buy|purchase|place order|go live|boost|promote)\b/i;
+// Supabase: reading is free; anything that changes a project, its data or settings asks.
+const SUPABASE_READ = /^(list_|get_|search_docs|generate_typescript_types|query_logs)/;
+const READ_SQL = /^\s*(select|with|explain|show)\b/i;
+const WRITE_SQL = /\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|comment\s+on|vacuum|reindex|copy|call|do|set_config|pg_terminate_backend|pg_cancel_backend|lo_import|lo_export)\b/i;
+// A SELECT can still call a function that writes, so only well-known read-only functions pass.
+const SAFE_FN = new Set(('count sum avg min max coalesce nullif greatest least lower upper trim length substring replace concat '
+  + 'now date_trunc date_part extract to_char to_date to_timestamp age round floor ceil abs cast distinct exists in any all not '
+  + 'and or as over filter from join on using where values array_agg string_agg json_agg jsonb_agg jsonb_build_object '
+  + 'json_build_object jsonb_array_length jsonb_typeof jsonb_object_keys row_number rank dense_rank lag lead '
+  + 'pg_size_pretty pg_total_relation_size pg_relation_size pg_database_size has_table_privilege format_type '
+  + 'obj_description col_description pg_get_functiondef pg_get_viewdef pg_get_constraintdef pg_get_indexdef unnest '
+  + 'generate_series split_part position left right md5 encode decode').split(' '));
+const onlySafeFunctions = (q) => [...q.matchAll(/([a-z_][a-z0-9_.]*)\s*\(/gi)].every((m) => SAFE_FN.has(m[1].toLowerCase().replace(/^.*\./, '')));
+
+function classifyMcp(toolName, input) {
+  const [, server, tool] = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(toolName) || [];
+  if (!server) return { decision: 'ask', reason: 'use ' + toolName };
+  if (server === 'browser') {
+    if (tool === 'browser_close') return { decision: 'deny', reason: 'the AgenticCore browser stays open (it is Fahad\'s logged-in window); open or close tabs with browser_tabs instead' };
+    if (tool === 'browser_run_code_unsafe') return { decision: 'ask', reason: 'run custom code in the browser tool (it can reach files on the VPS)' };
+    if (/^browser_(click|select_option)$/.test(tool) && PUBLIC_CLICK.test(String(input.element || ''))) {
+      return { decision: 'ask', reason: 'click "' + String(input.element).slice(0, 80) + '" in the browser' };
+    }
+    if (tool === 'browser_type' && input.submit && !/search|find|filter|url|address/i.test(String(input.element || ''))) {
+      return { decision: 'ask', reason: 'type and send "' + String(input.text || '').slice(0, 120) + '" in "' + String(input.element || 'a box').slice(0, 60) + '"' };
+    }
+    return { decision: 'allow' };
+  }
+  if (server === 'netlify') {
+    return /-reader$|^get-netlify-coding-context$|^get-design-import-job-status$/.test(tool)
+      ? { decision: 'allow' } : { decision: 'ask', reason: 'change something on Netlify (' + tool + ')' };
+  }
+  if (/^supabase\d$/.test(server)) {
+    if (tool === 'execute_sql') {
+      const q = String(input.query || '');
+      return READ_SQL.test(q) && !WRITE_SQL.test(q.replace(/^\s*(select|with|explain|show)\b/i, '')) && onlySafeFunctions(q)
+        ? { decision: 'allow' } : { decision: 'ask', reason: 'run SQL that may change a live Supabase database' };
+    }
+    return SUPABASE_READ.test(tool) ? { decision: 'allow' } : { decision: 'ask', reason: 'change something on Supabase (' + tool.replace(/_/g, ' ') + ')' };
+  }
+  return { decision: 'ask', reason: 'use ' + toolName };
+}
+
 // → { decision: 'allow' | 'ask' | 'deny', reason }
 export function classify(toolName, input = {}, { workspace }) {
   if (toolName.startsWith('mcp__hq__')) return { decision: 'allow' };
+  if (/agenticcore-token/i.test(JSON.stringify(input || {}))) return { decision: 'deny', reason: 'the Agenticcore-token project is off limits' };
+  if (toolName.startsWith('mcp__')) return classifyMcp(toolName, input);
   if (FREE.has(toolName)) {
     const p = input.file_path || input.path || input.notebook_path || '';
     if (toolName === 'Read' && /(^|[\\/])\.env$/i.test(String(p))) return { decision: 'deny', reason: 'keys are private' };

@@ -44,6 +44,14 @@ export function hqTools(deps) {
       { text: z.string().min(1) },
       guarded(async ({ text }) => { await tg.send(chat(), text); return ok('sent'); })),
 
+    tool('request_approval', 'Ask Fahad to approve something before you do it, with Allow / Deny buttons in Telegram; returns his answer. Use BEFORE anything public or hard to undo that the system does not already stop for: publishing or scheduling a post (Facebook, Instagram, Buffer, any page or group), sending a message to anyone other than Fahad, creating a new account, project or repository, spending money. Describe exactly what will happen (where, what text, which files).',
+      { what: z.string().min(3).max(200).describe('one line, e.g. "Publish this post on the AgenticCore Estate Facebook page"'), details: z.string().max(1500).optional() },
+      guarded(async ({ what, details }) => {
+        if (!deps.approvals) return fail('approvals are not available');
+        const r = await deps.approvals.request(chat(), what, details);
+        return ok(r.allowed ? 'APPROVED by Fahad — go ahead.' : 'NOT approved (' + (r.note || 'denied') + '). Do not do it, and do not try another way; tell him what you would need.');
+      })),
+
     tool('send_file', 'Send a file from the workspace to Fahad on Telegram (images show as photos, videos as videos, everything else as a document). Use after creating or downloading something he should see.',
       { path: z.string().describe('path inside the workspace, e.g. media/2026-10-09/flyer.png'), caption: z.string().optional() },
       guarded(async ({ path: p, caption }) => { await tg.sendFile(chat(), inWs(p), { caption }); return ok('sent ' + p); })),

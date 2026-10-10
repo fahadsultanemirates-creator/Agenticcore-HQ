@@ -15,6 +15,7 @@ import { makeApprovals } from './approvals.js';
 import { makeScheduler } from './schedule.js';
 import { makeHqServer } from './tools.js';
 import { makeBoss, MODEL_ALIASES } from './boss.js';
+import { externalServers as externalServers_, accountsNote } from './mcp.js';
 
 loadEnvFile();
 const cfg = readConfig();
@@ -51,8 +52,23 @@ const scheduler = makeScheduler(store, {
     else await tg.send(x.chatId, '⏰ Reminder: ' + x.text).catch(() => null);
   }
 });
-const hqServer = makeHqServer({ cfg, tg, providers, usage, scheduler, chatId: () => activeChat });
-boss = makeBoss({ cfg, tg, store, usage, approvals, hqServer, log });
+const hqServer = makeHqServer({ cfg, tg, providers, usage, scheduler, approvals, chatId: () => activeChat });
+const externalServers = externalServersSafe();
+boss = makeBoss({ cfg, tg, store, usage, approvals, hqServer, externalServers, accountsNote: accountsNote(cfg), log });
+
+function externalServersSafe() {
+  try {
+    const s = externalServers_(cfg);
+    log('tools: ' + (Object.keys(s).join(', ') || 'none') + ' (browser at ' + (cfg.browserCdp || 'off') + ')');
+    return s;
+  } catch (e) { log('external tools not loaded: ' + e.message); return {}; }
+}
+
+// Is the AgenticCore Edge window up? (it starts when Fahad logs into the VPS)
+async function browserUp() {
+  if (!cfg.browserCdp) return false;
+  try { const r = await fetch(cfg.browserCdp.replace(/\/$/, '') + '/json/version', { signal: AbortSignal.timeout(3000) }); return r.ok; } catch { return false; }
+}
 
 const HELP = [
   'AgenticCore HQ — your AI team. Just write or send a voice note.',
@@ -66,6 +82,8 @@ const HELP = [
   '/effort low | medium | high | xhigh | max — how hard I think (now: {effort})',
   '/models — the GPT / Gemini / Grok models I\'m using (/models all = the choices)',
   '/use gemini <model> — pick a model yourself (/use gemini auto = newest again)',
+  '/bigjob 40 — let the next job spend up to $40 (for long campaigns or projects)',
+  '/browser — is the AgenticCore browser on the VPS running?',
   '/help — this list'
 ].join('\n');
 
@@ -112,6 +130,18 @@ async function command(chatId, text) {
         } catch (e) { lines.push(p.name + ': error — ' + e.message); }
       }
       return tg.send(chatId, 'Claude: ' + boss.modelId(s.model) + ' (effort ' + s.effort + ')\n' + lines.join('\n') + (all ? '\nTo pick one: /use gemini <model>' : ''));
+    }
+    case '/bigjob': {
+      const n = Number(arg);
+      if (!(n > 0)) return tg.send(chatId, 'Use /bigjob 40 — the next job may then spend up to $40 (normal jobs stop at $' + cfg.jobBudget + '). Today\'s cap still applies: $' + usage.left().toFixed(2) + ' left.');
+      boss.setBigJob(n);
+      return tg.send(chatId, '✅ Your next job may spend up to $' + n.toFixed(2) + (n > usage.left() ? ' — but only $' + usage.left().toFixed(2) + ' is left today; /budget raises that.' : '.') + ' Now send the job.');
+    }
+    case '/browser': {
+      if (!cfg.browserCdp) return tg.send(chatId, 'The browser tools are off (HQ_BROWSER_CDP=off in .env).');
+      return tg.send(chatId, await browserUp()
+        ? '🟢 The AgenticCore browser is running. I can use the sites you are logged into there.'
+        : '🔴 The AgenticCore browser is not running. Connect to the VPS with Remote Desktop once — it starts when you log in. Then close the Remote Desktop window with the X (don\'t Sign out).');
     }
     case '/use': {
       const key = PROVIDER_ALIASES[(rawArgs[0] || '').toLowerCase()];
@@ -173,7 +203,12 @@ async function onMessage(msg) {
     if (msg.photo && msg.photo.length) files.push(await saveIncoming(msg.photo[msg.photo.length - 1].file_id, 'photo-' + msg.message_id + '.jpg'));
     if (msg.document) files.push(await saveIncoming(msg.document.file_id, msg.document.file_name));
     if (msg.video) files.push(await saveIncoming(msg.video.file_id, 'video-' + msg.message_id + '.mp4'));
-  } catch (e) { return tg.send(chatId, '⚠️ I couldn\'t download that file (' + e.message + '). Files over 20 MB can\'t come through the bot — share a link instead.'); }
+  } catch (e) {
+    const big = /too (large|big)/i.test(String(e.message));
+    return tg.send(chatId, big
+      ? '📦 That file is over Telegram\'s 20 MB limit for bots, so I can\'t take it here. Send it to yourself on WhatsApp ("Message yourself" chat) and tell me "take the video from WhatsApp" — I\'ll pick it up from WhatsApp Web. A Google Drive link works too.'
+      : '⚠️ I couldn\'t download that file (' + e.message + '). Please try again, or send a link.');
+  }
   if (files.length) prompt = (prompt ? prompt + '\n\n' : 'Fahad sent this without a message — ask what he wants if it is not obvious.\n\n') + 'Attached (saved in the workspace): ' + files.join(', ');
   if (!prompt.trim()) return tg.send(chatId, 'I can read text, voice notes, photos and files. What would you like me to do?');
 
@@ -230,6 +265,8 @@ await tg.setCommands([
   { command: 'effort', description: 'low … max' },
   { command: 'models', description: 'Which AI models are in use' },
   { command: 'use', description: 'Pick a GPT / Gemini / Grok model' },
+  { command: 'bigjob', description: 'Higher spending limit for the next job' },
+  { command: 'browser', description: 'Is the AgenticCore browser running?' },
   { command: 'help', description: 'Help' }
 ]);
 log('AgenticCore HQ started — model ' + boss.modelId(boss.settings().model) + ', effort ' + boss.settings().effort + ', workspace ' + cfg.workspace);
