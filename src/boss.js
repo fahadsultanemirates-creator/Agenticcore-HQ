@@ -10,6 +10,17 @@ import { classify, childEnv } from './guard.js';
 // "main" = the model set for this bot (HQ: Opus 5.5, Lite: Sonnet 5.5); the others are fixed models.
 export const MODEL_ALIASES = { main: 'model', opus: 'claude-opus-5-5', fable: 'modelHard', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5' };
 
+// What the approval message shows, so Fahad can see what he is allowing.
+export function describeForApproval(input = {}, fileKey = '') {
+  if (input.command) return String(input.command);
+  if (input.code) return 'Code:\n' + String(input.code).slice(0, 1200);
+  if (input.query) return 'SQL:\n' + String(input.query).slice(0, 1200);
+  if (input.element) return 'On the page: ' + String(input.element) + (input.text ? '\nText: ' + String(input.text).slice(0, 600) : '');
+  if (fileKey) return 'Later changes to this same file in this job will not ask again.';
+  const shown = JSON.stringify(input);
+  return shown && shown !== '{}' ? shown.slice(0, 800) : '';
+}
+
 export function describeTool(name, input = {}) {
   if (name === 'Bash' || name === 'PowerShell') {
     // Prefer the plain-words description the engine gives each command; else a short guess from the command.
@@ -79,7 +90,7 @@ export function makeBoss(deps) {
         if (c.decision === 'deny') return { behavior: 'deny', message: 'Not allowed: ' + c.reason + '.' };
         const key = fileKey(input);
         if (key && okFiles.has(key)) return { behavior: 'allow', updatedInput: input };
-        const detail = input.command ? String(input.command) : (key ? 'Later changes to this same file in this job will not ask again.' : '');
+        const detail = describeForApproval(input, key);
         const r = await approvals.request(chatId, c.reason, detail);
         if (r.allowed && key) okFiles.add(key);
         return r.allowed ? { behavior: 'allow', updatedInput: input } : { behavior: 'deny', message: 'Fahad did not approve this (' + (r.note || 'denied') + '). Do not try to do it another way; tell him what you would need.' };

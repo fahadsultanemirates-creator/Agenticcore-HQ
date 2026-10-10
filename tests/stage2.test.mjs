@@ -179,3 +179,12 @@ test('Lite: Sonnet manager at medium, Sonnet helpers at medium, Haiku Scout at l
   assert.equal(boss.modelId('opus'), 'claude-opus-5-5');
   assert.equal(boss.modelId('haiku'), 'claude-haiku-5-5');
 });
+
+test('approval messages show what is being allowed (code, SQL, page element)', async () => {
+  const { describeForApproval } = await import('../src/boss.js');
+  assert.match(describeForApproval({ code: 'await page.mouse.wheel(0, 2000)' }), /^Code:\nawait page\.mouse\.wheel/);
+  assert.match(describeForApproval({ query: 'update x set y = 1' }), /^SQL:\nupdate x/);
+  assert.match(describeForApproval({ element: 'Post button' }), /On the page: Post button/);
+  assert.match(describeForApproval({ command: 'git push' }), /git push/);
+  assert.match(describeForApproval({ siteId: 'abc' }), /siteId/);
+});
