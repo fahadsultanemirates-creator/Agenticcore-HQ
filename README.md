@@ -59,6 +59,28 @@ It:
 
 Keep that Edge window open; minimising it is fine. Close Remote Desktop with the **X**, never **Sign out**. After a VPS restart, connect with Remote Desktop once so the browser starts again. `/browser` in Telegram tells you whether it's running.
 
+## AgenticCore Lite (the cost-effective second bot)
+
+Same code, same rules and tools, cheaper models and smaller spending caps. Use it for everyday jobs like social media, browsing, captions, small Supabase/Netlify/GitHub tasks and simple pages. Keep HQ for hard coding and big decisions.
+
+| | HQ | Lite |
+|---|---|---|
+| Manager | Claude Opus 5.5, max | Claude Sonnet 5.5, medium |
+| Specialists | Opus (developer xhigh, others high) | Sonnet 5.5, medium |
+| Scout (browsing, reading, collecting) | none | Claude Haiku 5.5, low |
+| GPT / Gemini / Grok | GPT-6 Astra xhigh / 3.8 Flash high / Grok 4.7 high | GPT-6.1 Sol medium / 3.8 Flash low / Grok 4.7 low |
+| Caps | $8 per job, your daily cap | $1.50 per job, $10 per day |
+
+Install it once, on the VPS, in PowerShell as Administrator (HQ must be set up first). You'll need a second bot from @BotFather:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\lite.ps1
+```
+
+It copies the code to `C:\AgenticCoreHQ-Lite`, reuses HQ's API keys, asks only for the Lite bot's Telegram token, and starts Lite's own task and its own Edge window. That window uses port 9223, so you log in to Facebook and WhatsApp there once. It also starts Lite with HQ's profile and memory notes. Every Lite setting is in `C:\AgenticCoreHQ-Lite\.env`.
+
+To update Lite later, run `powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ-Lite\scripts\update.ps1`. Each copy's `update.ps1` restarts only that copy.
+
 ## Using it
 
 Just talk to it: text or voice notes, in English, Urdu or Roman Urdu. Send photos or files and it saves them to its workspace.
@@ -70,7 +92,7 @@ Just talk to it: text or voice notes, in English, Urdu or Roman Urdu. Send photo
 | `/status` | What it's doing right now |
 | `/cost` | Spending per day |
 | `/budget 50` | Raise today's Claude cap to $50 |
-| `/model opus` · `fable` · `sonnet` | Which Claude leads (default opus) |
+| `/model main` · `opus` · `sonnet` · `haiku` · `fable` | Which Claude leads (`main` = this bot's default) |
 | `/effort max` · `xhigh` · `high` · `medium` · `low` | How hard it thinks (default max) |
 | `/models` | Which GPT / Gemini / Grok models it's using (`/models all` lists the choices) |
 | `/use gemini <model>` | Pick a model yourself (`/use gemini auto` = newest again) |

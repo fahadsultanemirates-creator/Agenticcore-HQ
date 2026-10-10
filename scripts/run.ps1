@@ -5,6 +5,6 @@ Set-Location $Dir
 $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine')
 New-Item -ItemType Directory -Force (Join-Path $Dir 'logs') | Out-Null
 while ($true) {
-  & node src/index.js *>> (Join-Path $Dir 'logs\service.log')
+  & node (Join-Path $Dir 'src\index.js') *>> (Join-Path $Dir 'logs\service.log')
   Start-Sleep -Seconds 10
 }

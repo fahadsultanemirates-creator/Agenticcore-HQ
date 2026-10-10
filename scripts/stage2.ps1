@@ -87,26 +87,31 @@ if (-not (Test-Path $prefs)) {
   $json = @{ download = @{ default_directory = $downloads; prompt_for_download = $false; directory_upgrade = $true }; savefile = @{ default_directory = $downloads } } | ConvertTo-Json -Depth 4
   Set-Content -Path $prefs -Value $json -Encoding UTF8
 }
-$browserArgs = "--remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 --user-data-dir=`"$profileDir`" --no-first-run --no-default-browser-check --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling --restore-last-session"
+$port = ((Get-EnvValue 'HQ_BROWSER_CDP') -replace '.*:(\d+).*', '$1'); if ($port -notmatch '^\d+$') { $port = '9222' }
+$browserArgs = "--remote-debugging-port=$port --remote-debugging-address=127.0.0.1 --user-data-dir=`"$profileDir`" --no-first-run --no-default-browser-check --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling --restore-last-session"
 $me = "$env:USERDOMAIN\$env:USERNAME"
-$btask = 'AgenticCore Browser'
+$btask = Get-EnvValue 'HQ_BROWSER_TASK'; if (-not $btask) { $btask = 'AgenticCore Browser' }
 Unregister-ScheduledTask -TaskName $btask -Confirm:$false -ErrorAction SilentlyContinue
 $baction = New-ScheduledTaskAction -Execute $edge -Argument $browserArgs
 $btrigger = New-ScheduledTaskTrigger -AtLogOn -User $me
 $bset = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $btask -Action $baction -Trigger $btrigger -Settings $bset -User $me -RunLevel Limited | Out-Null
-Write-Host "OK  'AgenticCore Browser' starts whenever $me logs in to the VPS"
+Write-Host "OK  '$btask' starts whenever $me logs in to the VPS"
 
 $up = $false
-try { $up = (Invoke-WebRequest 'http://127.0.0.1:9222/json/version' -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200 } catch { }
+try { $up = (Invoke-WebRequest "http://127.0.0.1:$port/json/version" -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200 } catch { }
 $sites = 'https://www.facebook.com/ https://web.whatsapp.com/ https://publish.buffer.com/ https://app.netlify.com/ https://supabase.com/dashboard'
 if (-not $up) { Start-Process -FilePath $edge -ArgumentList "$browserArgs $sites" }
 else { Start-Process -FilePath $edge -ArgumentList "--user-data-dir=`"$profileDir`" $sites" }
 
 # ---------- 4. Restart the bot so it picks up the new tools ----------
-Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like '*src*index.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-Stop-ScheduledTask -TaskName 'AgenticCore HQ' -ErrorAction SilentlyContinue
-Start-ScheduledTask -TaskName 'AgenticCore HQ'
+$task = Get-EnvValue 'HQ_TASK'; if (-not $task) { $task = 'AgenticCore HQ' }
+Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
+$mine = Join-Path $Dir 'src\index.js'
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object {
+  $_.CommandLine -like "*$mine*" -or ($task -eq 'AgenticCore HQ' -and $_.CommandLine -match '\s"?src[\\/]index\.js')
+} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Start-ScheduledTask -TaskName $task
 
 Write-Host "`nDone." -ForegroundColor Green
 Write-Host 'Now, in the Edge window that just opened (this is the AgenticCore browser):'

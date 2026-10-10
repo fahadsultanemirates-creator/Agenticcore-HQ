@@ -42,7 +42,15 @@ export function readConfig(env = process.env) {
     telegramToken: e('TELEGRAM_BOT_TOKEN'),
     ownerId: e('TELEGRAM_OWNER_ID'),
     anthropicKey: e('ANTHROPIC_API_KEY'),
+    name: e('HQ_NAME', 'AgenticCore HQ'),
+    lite: e('HQ_LITE') === '1',          // the cost-effective edition (scripts/lite.ps1)
     model: e('HQ_MODEL', 'claude-opus-5-5'),
+    // Specialist sub-agents: same model as the boss unless set; effort from each specialist unless set.
+    helperModel: m('HQ_HELPER_MODEL', e('HQ_MODEL', 'claude-opus-5-5')),
+    helperEffort: EFFORTS.includes(e('HQ_HELPER_EFFORT')) ? e('HQ_HELPER_EFFORT') : '',
+    // Scout (Lite only): cheap helper for browsing, reading pages, collecting and formatting.
+    scoutModel: m('HQ_SCOUT_MODEL', 'claude-haiku-5-5'),
+    scoutEffort: EFFORTS.includes(e('HQ_SCOUT_EFFORT')) ? e('HQ_SCOUT_EFFORT') : 'low',
     modelHard: e('HQ_MODEL_HARD', 'claude-fable-5-1'),
     effort: EFFORTS.includes(e('HQ_EFFORT')) ? e('HQ_EFFORT') : 'max',
     openaiKey: e('OPENAI_API_KEY'), openaiModel: m('OPENAI_MODEL'), openaiImageModel: m('OPENAI_IMAGE_MODEL', 'gpt-image-1'),

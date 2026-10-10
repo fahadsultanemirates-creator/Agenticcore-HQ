@@ -4,10 +4,11 @@
 // (/new starts fresh). Jobs run one at a time; new messages wait in a queue.
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { HQ_PROMPT, SPECIALISTS } from './prompt.js';
+import { HQ_PROMPT, LITE_PROMPT, SPECIALISTS, SCOUT } from './prompt.js';
 import { classify, childEnv } from './guard.js';
 
-export const MODEL_ALIASES = { opus: 'model', fable: 'modelHard', sonnet: 'claude-sonnet-5-5' };
+// "main" = the model set for this bot (HQ: Opus 5.5, Lite: Sonnet 5.5); the others are fixed models.
+export const MODEL_ALIASES = { main: 'model', opus: 'claude-opus-5-5', fable: 'modelHard', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5' };
 
 export function describeTool(name, input = {}) {
   if (name === 'Bash' || name === 'PowerShell') {
@@ -44,10 +45,18 @@ export function makeBoss(deps) {
   let nextJobBudget = null;   // /bigjob: a higher spending limit for the next job only
   let jobCap = cfg.jobBudget;
   const external = deps.externalServers || {};
-  const systemAppend = HQ_PROMPT + (deps.accountsNote ? '\n\n' + deps.accountsNote : '');
+  const systemAppend = HQ_PROMPT.replace('# You are AgenticCore HQ', '# You are ' + cfg.name)
+    + (cfg.lite ? '\n\n' + LITE_PROMPT : '') + (deps.accountsNote ? '\n\n' + deps.accountsNote : '');
+  const servers = ['hq'].concat(Object.keys(external));
+  function specialists() {
+    const out = {};
+    for (const [k, a] of Object.entries(SPECIALISTS)) out[k] = Object.assign({}, a, { model: cfg.helperModel, effort: cfg.helperEffort || a.effort, mcpServers: servers });
+    if (cfg.lite) out.scout = Object.assign({}, SCOUT, { model: cfg.scoutModel, effort: cfg.scoutEffort, mcpServers: servers });
+    return out;
+  }
 
-  const settings = () => store.read('settings', { model: 'opus', effort: cfg.effort });
-  function modelId(alias) { const k = MODEL_ALIASES[alias] || 'model'; return cfg[k] || k; }
+  const settings = () => store.read('settings', { model: 'main', effort: cfg.effort });
+  function modelId(alias) { const k = MODEL_ALIASES[alias] || MODEL_ALIASES.main; return cfg[k] || k; }
 
   function options(chatId, sessionId, abort) {
     const s = settings();
@@ -55,14 +64,14 @@ export function makeBoss(deps) {
     const fileKey = (input) => (input.file_path ? String(input.file_path).replace(/\//g, '\\').toLowerCase() : '');
     return {
       model: modelId(s.model),
-      fallbackModel: s.model === 'opus' ? undefined : cfg.model,
+      fallbackModel: modelId(s.model) === cfg.model ? undefined : cfg.model,
       effort: s.effort || cfg.effort,
       thinking: { type: 'adaptive' },
       cwd: cfg.workspace,
       settingSources: ['project'],                       // loads workspace/CLAUDE.md (+ memory/notes.md)
       systemPrompt: { type: 'preset', preset: 'claude_code', append: systemAppend },
       mcpServers: Object.assign({ hq: deps.hqServer }, external),
-      agents: Object.fromEntries(Object.entries(SPECIALISTS).map(([k, a]) => [k, Object.assign({ model: modelId('opus'), mcpServers: ['hq'].concat(Object.keys(external)) }, a)])),
+      agents: specialists(),
       permissionMode: 'default',
       canUseTool: async (toolName, input) => {
         const c = classify(toolName, input, { workspace: cfg.workspace, blocked: deps.blockedIds ? deps.blockedIds() : [] });

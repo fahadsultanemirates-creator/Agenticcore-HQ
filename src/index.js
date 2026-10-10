@@ -73,14 +73,14 @@ async function browserUp() {
 }
 
 const HELP = [
-  'AgenticCore HQ — your AI team. Just write or send a voice note.',
+  cfg.name + ' — your AI team. Just write or send a voice note.',
   '',
   '/new — start a fresh conversation (memory notes stay)',
   '/stop — stop the current job',
   '/status — what I\'m doing now',
   '/cost — spending (Claude per day, other AI calls)',
   '/budget 50 — raise today\'s Claude cap to $50',
-  '/model opus | fable | sonnet — which Claude leads (now: {model})',
+  '/model main | opus | sonnet | haiku | fable — which Claude leads (now: {model})',
   '/effort low | medium | high | xhigh | max — how hard I think (now: {effort})',
   '/models — the GPT / Gemini / Grok models I\'m using (/models all = the choices)',
   '/use gemini <model> — pick a model yourself (/use gemini auto = newest again)',
@@ -96,7 +96,7 @@ async function command(chatId, text) {
   const s = boss.settings();
   switch (cmd.toLowerCase().replace(/@.*$/, '')) {
     case '/start': case '/help':
-      return tg.send(chatId, HELP.replace('{model}', s.model).replace('{effort}', s.effort));
+      return tg.send(chatId, HELP.replace('{model}', s.model + ' = ' + boss.modelId(s.model)).replace('{effort}', s.effort));
     case '/new':
       boss.newConversation(chatId);
       return tg.send(chatId, '🆕 Fresh conversation started. What shall we work on?');
@@ -114,7 +114,7 @@ async function command(chatId, text) {
       return tg.send(chatId, '✅ Today\'s Claude cap is now $' + n.toFixed(2) + '.');
     }
     case '/model':
-      if (!MODEL_ALIASES[arg]) return tg.send(chatId, 'Use /model opus (default), /model fable (hardest jobs) or /model sonnet (faster, cheaper). Now: ' + s.model);
+      if (!MODEL_ALIASES[arg]) return tg.send(chatId, 'Use /model main (this bot\'s default: ' + boss.modelId('main') + '), opus, sonnet, haiku or fable (hardest jobs). Now: ' + s.model + ' = ' + boss.modelId(s.model));
       store.write('settings', Object.assign({}, s, { model: arg }));
       return tg.send(chatId, '✅ ' + arg + ' (' + boss.modelId(arg) + ') leads from your next message.');
     case '/effort':
@@ -271,6 +271,6 @@ await tg.setCommands([
   { command: 'browser', description: 'Is the AgenticCore browser running?' },
   { command: 'help', description: 'Help' }
 ]);
-log('AgenticCore HQ started — model ' + boss.modelId(boss.settings().model) + ', effort ' + boss.settings().effort + ', workspace ' + cfg.workspace);
-await tg.send(cfg.ownerId, '🟢 AgenticCore HQ is online. Model: ' + boss.settings().model + ', effort: ' + boss.settings().effort + '. Send /help for commands.').catch((e) => log('could not message the owner: ' + e.message + ' — have you pressed Start on the bot in Telegram?'));
+log(cfg.name + ' started — model ' + boss.modelId(boss.settings().model) + ', effort ' + boss.settings().effort + ', workspace ' + cfg.workspace);
+await tg.send(cfg.ownerId, '🟢 ' + cfg.name + ' is online. Model: ' + boss.modelId(boss.settings().model) + ', effort: ' + boss.settings().effort + '. Send /help for commands.').catch((e) => log('could not message the owner: ' + e.message + ' — have you pressed Start on the bot in Telegram?'));
 poll();
