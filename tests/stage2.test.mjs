@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { readConfig } from '../src/config.js';
 import { classify } from '../src/guard.js';
-import { externalServers, accountsNote } from '../src/mcp.js';
+import { externalServers, accountsNote, findBlockedIds } from '../src/mcp.js';
 import { makeBoss } from '../src/boss.js';
 import { hqTools } from '../src/tools.js';
 import { makeStore } from '../src/store.js';
@@ -126,4 +126,18 @@ test('request_approval asks Fahad and reports his answer', async () => {
   r = await t.handler({ what: 'Message a group admin' });
   assert.match(r.content[0].text, /NOT approved/);
   assert.deepEqual(asked[0], ['9', 'Publish this post on the Estate Facebook page', 'Text: Khwabon se ghar tak']);
+});
+
+test('the Agenticcore-token project is refused by id too (Supabase ref, Netlify site id)', async () => {
+  const cfg = readConfig(env);
+  const f = async (url) => ({ ok: true, json: async () => url.includes('supabase')
+    ? [{ ref: 'tokref123', name: 'Agenticcore-token' }, { ref: 'estref456', name: 'Agenticcore-estate' }]
+    : [{ id: 'site-tok', site_id: 'site-tok', name: 'agenticcore-token', custom_domain: 'actoken.org' }, { id: 'site-est', name: 'agenticcore-estate' }] });
+  const ids = await findBlockedIds(cfg, f);
+  assert.deepEqual(ids.sort(), ['site-tok', 'tokref123']);
+  const c = (t, i) => classify(t, i, { workspace: '/w', blocked: ids }).decision;
+  assert.equal(c('mcp__supabase2__list_tables', { project_id: 'tokref123' }), 'deny');
+  assert.equal(c('mcp__supabase2__list_tables', { project_id: 'estref456' }), 'allow');
+  assert.equal(c('mcp__netlify__netlify-deploy-services-reader', { siteId: 'site-tok' }), 'deny');
+  assert.equal(c('Bash', { command: 'curl https://actoken.org' }), 'deny');
 });

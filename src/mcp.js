@@ -53,3 +53,28 @@ export function accountsNote(cfg) {
   lines.push('- GitHub: gh and git with his token (the repos he chose). ffmpeg is installed for video work.');
   return lines.join('\n');
 }
+
+// Ids of the Agenticcore-token project on Supabase and Netlify, so the guard can refuse
+// tool calls that name it by id rather than by name. Looked up once at startup.
+const OFF_LIMITS = /agenticcore-token|actoken/i;
+export async function findBlockedIds(cfg, fetchImpl = globalThis.fetch) {
+  const ids = new Set();
+  const get = async (url, token) => {
+    const r = await fetchImpl(url, { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(20000) });
+    return r.ok ? r.json() : [];
+  };
+  for (const a of cfg.supabase) {
+    try {
+      for (const p of await get('https://api.supabase.com/v1/projects', a.token)) if (OFF_LIMITS.test(p.name || '')) ids.add(p.ref || p.id);
+    } catch { /* offline: the name check still applies */ }
+  }
+  if (cfg.netlifyToken) {
+    try {
+      for (const s of await get('https://api.netlify.com/api/v1/sites?per_page=100', cfg.netlifyToken)) {
+        if (OFF_LIMITS.test((s.name || '') + ' ' + (s.custom_domain || '') + ' ' + (s.url || ''))) { ids.add(s.id); ids.add(s.site_id); }
+      }
+    } catch { /* offline: the name check still applies */ }
+  }
+  ids.delete(undefined);
+  return [...ids];
+}

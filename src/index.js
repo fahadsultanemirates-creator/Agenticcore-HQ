@@ -15,7 +15,7 @@ import { makeApprovals } from './approvals.js';
 import { makeScheduler } from './schedule.js';
 import { makeHqServer } from './tools.js';
 import { makeBoss, MODEL_ALIASES } from './boss.js';
-import { externalServers as externalServers_, accountsNote } from './mcp.js';
+import { externalServers as externalServers_, accountsNote, findBlockedIds } from './mcp.js';
 
 loadEnvFile();
 const cfg = readConfig();
@@ -54,7 +54,9 @@ const scheduler = makeScheduler(store, {
 });
 const hqServer = makeHqServer({ cfg, tg, providers, usage, scheduler, approvals, chatId: () => activeChat });
 const externalServers = externalServersSafe();
-boss = makeBoss({ cfg, tg, store, usage, approvals, hqServer, externalServers, accountsNote: accountsNote(cfg), log });
+let blockedIds = [];
+findBlockedIds(cfg).then((ids) => { blockedIds = ids; log('off-limits ids found: ' + ids.length); }).catch((e) => log('off-limits lookup failed: ' + e.message));
+boss = makeBoss({ cfg, tg, store, usage, approvals, hqServer, externalServers, accountsNote: accountsNote(cfg), blockedIds: () => blockedIds, log });
 
 function externalServersSafe() {
   try {

@@ -89,9 +89,11 @@ function classifyMcp(toolName, input) {
 }
 
 // → { decision: 'allow' | 'ask' | 'deny', reason }
-export function classify(toolName, input = {}, { workspace }) {
+// blocked: ids of the Agenticcore-token Supabase project / Netlify site (found at startup), refused like the name.
+export function classify(toolName, input = {}, { workspace, blocked = [] }) {
   if (toolName.startsWith('mcp__hq__')) return { decision: 'allow' };
-  if (/agenticcore-token/i.test(JSON.stringify(input || {}))) return { decision: 'deny', reason: 'the Agenticcore-token project is off limits' };
+  const text = JSON.stringify(input || {});
+  if (/agenticcore-token|actoken\.org/i.test(text) || blocked.some((id) => id && text.includes(id))) return { decision: 'deny', reason: 'the Agenticcore-token project is off limits' };
   if (toolName.startsWith('mcp__')) return classifyMcp(toolName, input);
   if (FREE.has(toolName)) {
     const p = input.file_path || input.path || input.notebook_path || '';
