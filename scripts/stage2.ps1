@@ -1,4 +1,4 @@
-# AgenticCore HQ — stage 2 setup: video tool, the AgenticCore browser and
+# AgenticCore HQ - stage 2 setup: video tool, the AgenticCore browser and
 # Netlify / Supabase access. Run once, in PowerShell as Administrator, while
 # logged in to the VPS with Remote Desktop (after scripts\update.ps1):
 #   powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\stage2.ps1
@@ -7,7 +7,7 @@
 $ErrorActionPreference = 'Stop'
 $Dir = Split-Path -Parent $PSScriptRoot
 Set-Location $Dir
-Write-Host "`n=== AgenticCore HQ — stage 2 ($Dir) ===`n" -ForegroundColor Green
+Write-Host "`n=== AgenticCore HQ - stage 2 ($Dir) ===`n" -ForegroundColor Green
 
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) { Write-Host 'Please run PowerShell as Administrator (right-click > Run as administrator).' -ForegroundColor Red; exit 1 }
@@ -35,7 +35,7 @@ if ($machinePath -notlike "*$ffBin*") { [Environment]::SetEnvironmentVariable('P
 
 # ---------- 2. Netlify / Supabase tokens (saved in .env) ----------
 $envFile = Join-Path $Dir '.env'
-if (-not (Test-Path $envFile)) { throw 'No .env found — run scripts\setup.ps1 first.' }
+if (-not (Test-Path $envFile)) { throw 'No .env found - run scripts\setup.ps1 first.' }
 $envLines = [System.Collections.ArrayList]@(Get-Content $envFile)
 function Get-EnvValue($key) {
   $l = $envLines | Where-Object { $_ -like "$key=*" } | Select-Object -First 1
@@ -50,7 +50,7 @@ function Ask-Secret($label) {
   $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($s)
   try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b).Trim() } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }
 }
-function Have($key) { if (Get-EnvValue $key) { return ' [already set — press Enter to keep]' } else { return ' [press Enter to skip]' } }
+function Have($key) { if (Get-EnvValue $key) { return ' [already set - press Enter to keep]' } else { return ' [press Enter to skip]' } }
 
 Write-Host "`nTokens are typed here only (hidden as you type) and saved in $envFile."
 Write-Host 'Netlify: app.netlify.com > your avatar > User settings > Applications > Personal access tokens > New access token.'
@@ -63,7 +63,7 @@ foreach ($n in 1, 2, 3) {
   if ($v) { Set-EnvValue "SUPABASE_TOKEN_$n" $v }
   if (Get-EnvValue "SUPABASE_TOKEN_$n") {
     $old = Get-EnvValue "SUPABASE_LABEL_$n"
-    $hint = if ($old) { " [now: $old — Enter keeps it]" } else { '' }
+    $hint = if ($old) { " [now: $old - Enter keeps it]" } else { '' }
     $label = Read-Host "  A name for Supabase account $n, e.g. 'Estate + PK' or 'Agency'$hint"
     if ($label) { Set-EnvValue "SUPABASE_LABEL_$n" ($label -replace '[\r\n=]', ' ') }
   }
@@ -111,6 +111,6 @@ Start-ScheduledTask -TaskName 'AgenticCore HQ'
 Write-Host "`nDone." -ForegroundColor Green
 Write-Host 'Now, in the Edge window that just opened (this is the AgenticCore browser):'
 Write-Host '  1. Log in to Facebook, scan the WhatsApp Web QR code with your phone, log in to Buffer (and Netlify / Supabase if you like).'
-Write-Host '  2. Leave the window open. Minimise it if you want — never close it.'
+Write-Host '  2. Leave the window open. Minimise it if you want - never close it.'
 Write-Host '  3. Close Remote Desktop with the X at the top. Do NOT use Sign out (that would close the browser).'
-Write-Host 'Then send /browser to the bot in Telegram — it should say the browser is running.'
+Write-Host 'Then send /browser to the bot in Telegram - it should say the browser is running.'

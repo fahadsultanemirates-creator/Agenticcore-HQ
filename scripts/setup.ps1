@@ -1,4 +1,4 @@
-# AgenticCore HQ — one-time setup on a Windows VPS.
+# AgenticCore HQ - one-time setup on a Windows VPS.
 # Run in PowerShell as Administrator:
 #   powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\setup.ps1
 # It installs Node.js, Git and GitHub CLI if missing, installs the bot, asks
@@ -72,7 +72,7 @@ $envFile = Join-Path $Dir '.env'
 $keep = $false
 if (Test-Path $envFile) { $keep = (Read-Host 'A .env with your keys already exists. Keep it? (Y/n)') -notmatch '^[nN]' }
 function Ask-Secret($label, [bool]$optional) {
-  $hint = if ($optional) { ' (optional — press Enter to skip)' } else { '' }
+  $hint = if ($optional) { ' (optional - press Enter to skip)' } else { '' }
   $s = Read-Host -AsSecureString ($label + $hint)
   $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($s)
   try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b).Trim() } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }
