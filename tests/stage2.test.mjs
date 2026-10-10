@@ -141,3 +141,41 @@ test('the Agenticcore-token project is refused by id too (Supabase ref, Netlify 
   assert.equal(c('mcp__netlify__netlify-deploy-services-reader', { siteId: 'site-tok' }), 'deny');
   assert.equal(c('Bash', { command: 'curl https://actoken.org' }), 'deny');
 });
+
+test('HQ stays full power: Opus everywhere, specialists keep their own effort, no Scout', async () => {
+  const { boss, seen } = bossSetup();
+  boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
+  const o = seen[0];
+  assert.equal(o.model, 'claude-opus-5-5');
+  assert.deepEqual(Object.keys(o.agents).sort(), ['creative', 'developer', 'marketing', 'researcher']);
+  assert.equal(o.agents.developer.model, 'claude-opus-5-5');
+  assert.equal(o.agents.developer.effort, 'xhigh');
+  assert.match(o.systemPrompt.append, /^# You are AgenticCore HQ/);
+  assert.ok(!/cost-effective edition/.test(o.systemPrompt.append));
+});
+
+test('Lite: Sonnet manager at medium, Sonnet helpers at medium, Haiku Scout at low, Lite rules in the prompt', async () => {
+  const lite = readConfig({ HQ_WORKSPACE: tmp(), ANTHROPIC_API_KEY: 'k', HQ_LITE: '1', HQ_NAME: 'AgenticCore Lite',
+    HQ_MODEL: 'claude-sonnet-5-5', HQ_EFFORT: 'medium', HQ_HELPER_MODEL: 'claude-sonnet-5-5', HQ_HELPER_EFFORT: 'medium',
+    HQ_SCOUT_MODEL: 'claude-haiku-5-5', HQ_SCOUT_EFFORT: 'low' });
+  const store = makeStore(tmp());
+  const seen = [];
+  const queryFn = ({ options }) => { seen.push(options); return (async function* () {
+    yield { type: 'result', subtype: 'success', is_error: false, result: 'ok', total_cost_usd: 0, num_turns: 1, session_id: 's' };
+  })(); };
+  const boss = makeBoss({ cfg: lite, tg: { send: async () => ({}), typing: () => null }, store, usage: makeUsage(store, lite), approvals: { request: async () => ({ allowed: true }), cancelAll() {} }, hqServer: {}, log: () => null, queryFn });
+  boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
+  const o = seen[0];
+  assert.equal(o.model, 'claude-sonnet-5-5');
+  assert.equal(o.effort, 'medium');
+  assert.equal(o.fallbackModel, undefined);
+  assert.equal(o.agents.marketing.model, 'claude-sonnet-5-5');
+  assert.equal(o.agents.developer.effort, 'medium');
+  assert.equal(o.agents.scout.model, 'claude-haiku-5-5');
+  assert.equal(o.agents.scout.effort, 'low');
+  assert.match(o.systemPrompt.append, /^# You are AgenticCore Lite/);
+  assert.match(o.systemPrompt.append, /cost-effective edition/);
+  assert.equal(boss.modelId('main'), 'claude-sonnet-5-5');
+  assert.equal(boss.modelId('opus'), 'claude-opus-5-5');
+  assert.equal(boss.modelId('haiku'), 'claude-haiku-5-5');
+});
