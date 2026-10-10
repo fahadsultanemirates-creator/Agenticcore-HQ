@@ -142,3 +142,11 @@ test('a key pasted on a model line is ignored, never shown as a model', () => {
   assert.equal(c.xaiModel, '');
   assert.equal(c.geminiModel, 'gemini-3.8-flash');
 });
+
+test('Windows scripts are plain ASCII (Windows PowerShell 5 misreads long dashes and smart quotes)', () => {
+  const dir = new URL('../scripts/', import.meta.url);
+  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.ps1'))) {
+    const bad = fs.readFileSync(new URL(f, dir), 'utf8').split('\n').findIndex((l) => /[^\x00-\x7F]/.test(l));
+    assert.equal(bad, -1, f + ' line ' + (bad + 1) + ' has a non-ASCII character');
+  }
+});
