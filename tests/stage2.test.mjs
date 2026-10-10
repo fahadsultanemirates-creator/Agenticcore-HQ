@@ -31,6 +31,9 @@ test('servers: each token goes only to its own server; the boss is told labels, 
   const s = externalServers(cfg, (pkg) => '/bin/' + pkg);
   assert.deepEqual(Object.keys(s), ['browser', 'netlify', 'supabase1', 'supabase3']);
   assert.ok(s.browser.args.includes('--cdp-endpoint'));
+  assert.equal(s.browser.timeout, 180000);            // one stuck browser step can't hang a job
+  assert.ok(s.browser.args.includes('--timeout-action'));
+  assert.equal(s.supabase1.timeout, 600000);
   assert.equal(s.netlify.env.NETLIFY_PERSONAL_ACCESS_TOKEN, 'nfp_secret');
   assert.equal(s.supabase1.env.SUPABASE_ACCESS_TOKEN, 'sbp_one');
   assert.equal(s.supabase3.env.SUPABASE_ACCESS_TOKEN, 'sbp_three');

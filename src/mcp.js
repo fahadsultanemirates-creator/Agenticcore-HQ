@@ -17,9 +17,11 @@ export function binOf(pkg) {
   return path.join(dir, bin);
 }
 
-function server(pkg, args, env, resolve) {
+// timeoutMs: hard limit per tool call, so one stuck call (e.g. a browser script waiting
+// for something that never appears) fails and the boss can try another way.
+function server(pkg, args, env, resolve, timeoutMs) {
   try {
-    return { type: 'stdio', command: process.execPath, args: [resolve(pkg)].concat(args), env: childEnv(process.env, env) };
+    return { type: 'stdio', command: process.execPath, args: [resolve(pkg)].concat(args), env: childEnv(process.env, env), timeout: timeoutMs };
   } catch { return null; }   // package not installed yet: run scripts/update.ps1
 }
 
@@ -30,12 +32,14 @@ export function externalServers(cfg, resolve = binOf) {
     out.browser = server('@playwright/mcp', [
       '--cdp-endpoint', cfg.browserCdp,
       '--output-dir', path.join(cfg.workspace, 'browser'),
-      '--image-responses', 'allow'
-    ], {}, resolve);
+      '--image-responses', 'allow',
+      '--timeout-action', '20000',
+      '--timeout-navigation', '60000'
+    ], {}, resolve, 3 * 60000);
   }
-  if (cfg.netlifyToken) out.netlify = server('@netlify/mcp', [], { NETLIFY_PERSONAL_ACCESS_TOKEN: cfg.netlifyToken }, resolve);
+  if (cfg.netlifyToken) out.netlify = server('@netlify/mcp', [], { NETLIFY_PERSONAL_ACCESS_TOKEN: cfg.netlifyToken }, resolve, 10 * 60000);
   cfg.supabase.forEach((a) => {
-    out['supabase' + a.n] = server('@supabase/mcp-server-supabase', ['--features', 'account,database,debugging,development,docs,functions,branching'], { SUPABASE_ACCESS_TOKEN: a.token }, resolve);
+    out['supabase' + a.n] = server('@supabase/mcp-server-supabase', ['--features', 'account,database,debugging,development,docs,functions,branching'], { SUPABASE_ACCESS_TOKEN: a.token }, resolve, 10 * 60000);
   });
   for (const k of Object.keys(out)) if (!out[k]) delete out[k];
   return out;
