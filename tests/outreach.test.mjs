@@ -37,6 +37,12 @@ test('quality gates: Pakistan real estate, no evidence, no hook, duplicates, own
   assert.match(r.added[0], /^20261012-AE-0001$/);
 });
 
+test('leads without a website ("none") are not duplicates of each other', () => {
+  const o = makeOutreach({ dir: tmp() });
+  const r = o.addLeads([lead({ company_name: 'Salon A', website: 'none' }), lead({ company_name: 'Salon B', website: 'none' }), lead({ company_name: 'Salon C', website: 'N/A' })]);
+  assert.equal(r.added.length, 3);
+});
+
 test('emails: personal addresses dropped in strict regions, no email without its source', () => {
   const o = makeOutreach({ dir: tmp() });
   o.addLeads([

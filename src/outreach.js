@@ -48,7 +48,8 @@ const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[a-z]{2,}$/i;
 const REAL_ESTATE = /real[\s-]?estate|realt(y|or)|property|properties|estate agent|broker(age)?|زمین|plot|marla|housing society/i;
 const PAKISTAN = /^(pk|pak|pakistan)$/i;
 const OWN_PK_SITES = /agenticcore\.estate|agenticcorepk\.com/i;
-export const domainOf = (u) => { try { return new URL(/^https?:/i.test(u) ? u : 'https://' + u).hostname.replace(/^www\./, '').toLowerCase(); } catch { return ''; } };
+// Only a real web address counts ("none", "n/a", "-" give '' so they never match each other).
+export const domainOf = (u) => { try { const h = new URL(/^https?:/i.test(u) ? u : 'https://' + u).hostname.replace(/^www\./, '').toLowerCase(); return h.includes('.') ? h : ''; } catch { return ''; } };
 const norm = (s) => String(s || '').trim().toLowerCase();
 
 export function makeOutreach({ dir, now = () => new Date(), emailCapPerAccount = 8, accounts = [], tokenTtlMs = 10 * 60000 }) {
