@@ -100,6 +100,7 @@ test('schedule times are Dubai time', () => {
   assert.equal(nextDubai('03:00', new Date('2026-10-12T05:00:00Z')), '2026-10-12T23:00:00.000Z');   // already past → tomorrow 03:00
   assert.match(OUTREACH_JOBS.report, /what worked|worked/);
   assert.match(OUTREACH_JOBS.report, /ideas/);
+  assert.match(OUTREACH_JOBS.research, /at most 15 new targets/);
 });
 
 function bossFor(extraEnv) {
@@ -118,6 +119,8 @@ test('outreach edition: manager cannot use the browser, the scout can; a reserve
   const o = seen[0];
   assert.match(o.systemPrompt.append, /outreach field team/);
   assert.match(o.systemPrompt.append, /a@gmail\.com/);
+  assert.match(o.systemPrompt.append, /Never keep browsing on your own/);
+  assert.match(o.systemPrompt.append, /\/auto on/);
   assert.match(o.agents.scout.prompt, /public pages only/);
   const nav = { url: 'https://example.com' };
   assert.equal((await o.canUseTool('mcp__browser__browser_navigate', nav, {})).behavior, 'deny');                   // manager

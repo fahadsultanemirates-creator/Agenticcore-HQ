@@ -95,8 +95,9 @@ powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\lite.ps1 -Edit
 - Rules enforced in code:
   - Leads need evidence and a personal hook. No Pakistan real estate. No duplicates within 90 days. The opt-out and bounce list is respected.
   - An email goes out only after you approve the day's batch, with one Send click per reserved email and each account's daily cap.
-- Daily, Dubai time: research at 03:00; the full report at 10:00 (the last 24 hours: activity, what got interest, what is not working, new data, field ideas, then the email batch for approval); the evening check at 20:30.
-- Commands: `/report` (the report now), `/send` (send today's approved emails), `/leads` (the sheet).
+- It starts in **test mode**: no daily jobs, it works only on what you ask and then stops. `/auto on` starts the daily routine and `/auto off` stops it.
+- With `/auto on`, daily, Dubai time: research at 03:00 (at most 15 new leads); the full report at 10:00 (the last 24 hours: activity, what got interest, what is not working, new data, field ideas, then the email batch for approval); the evening check at 20:30.
+- Commands: `/report` (the report now), `/send` (send today's approved emails), `/leads` (the sheet), `/auto on|off` (the daily routine).
 
 ## Using it
 

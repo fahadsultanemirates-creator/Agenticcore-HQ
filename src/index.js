@@ -60,13 +60,14 @@ let blockedIds = [];
 findBlockedIds(cfg).then((ids) => { blockedIds = ids; log('off-limits ids found: ' + ids.length); }).catch((e) => log('off-limits lookup failed: ' + e.message));
 boss = makeBoss({ cfg, tg, store, usage, approvals, hqServer, externalServers, accountsNote: accountsNote(cfg), blockedIds: () => blockedIds, outreach, log });
 
-// Outreach edition: the daily jobs (Dubai time), set up once; change or cancel them like any schedule.
-if (outreach && !store.read('state', {}).outreachSeeded) {
-  for (const [job, every] of [['research', 'daily'], ['report', 'daily'], ['evening', 'daily']]) {
-    scheduler.add({ when: nextDubai(cfg.outreachTimes[job]), every, kind: 'task', text: OUTREACH_JOBS[job], chatId: cfg.ownerId });
-  }
-  store.update('state', {}, (s) => { s.outreachSeeded = true; });
-  log('outreach: daily research ' + cfg.outreachTimes.research + ', report ' + cfg.outreachTimes.report + ', evening ' + cfg.outreachTimes.evening + ' (Dubai)');
+// Outreach edition: the daily routine (Dubai time) is off until Fahad sends /auto on (test mode:
+// the team works only on what he asks). /auto off removes it again.
+const OUTREACH_TEXTS = new Set(Object.values(OUTREACH_JOBS));
+const routineOn = () => scheduler.list().some((x) => OUTREACH_TEXTS.has(x.text));
+function setRoutine(on) {
+  for (const x of scheduler.list()) if (OUTREACH_TEXTS.has(x.text)) scheduler.cancel(x.id);
+  if (on) for (const job of ['research', 'report', 'evening']) scheduler.add({ when: nextDubai(cfg.outreachTimes[job]), every: 'daily', kind: 'task', text: OUTREACH_JOBS[job], chatId: cfg.ownerId });
+  log('outreach: daily routine ' + (on ? 'on' : 'off'));
 }
 
 function externalServersSafe() {
@@ -97,7 +98,7 @@ const HELP = [
   '/use gemini <model> — pick a model yourself (/use gemini auto = newest again)',
   '/bigjob 40 — let the next job spend up to $40 (for long campaigns or projects)',
   '/browser — is the AgenticCore browser on the VPS running?',
-  ...(cfg.outreach ? ['/report — the outreach report now (last 24h)', '/send — approve and send today\'s prepared emails', '/leads — send me the lead sheet'] : []),
+  ...(cfg.outreach ? ['/report — the outreach report now (last 24h)', '/send — approve and send today\'s prepared emails', '/leads — send me the lead sheet', '/auto on | off — daily routine (off = test mode, works only when asked)'] : []),
   '/help — this list'
 ].join('\n');
 
@@ -165,6 +166,15 @@ async function command(chatId, text) {
       if (!outreach) return null;
       boss.enqueue({ chatId, prompt: 'Ask Fahad to approve the email drafts prepared for today (outreach_request_email_batch) and, if approved, send them as instructed. If there are none, say so.' });
       return tg.send(chatId, '📧 Getting today\'s emails ready for your approval…');
+    case '/auto': {
+      if (!outreach) return null;
+      const want = (rawArgs[0] || '').toLowerCase();
+      if (want === 'on' || want === 'off') setRoutine(want === 'on');
+      const t = cfg.outreachTimes;
+      return tg.send(chatId, routineOn()
+        ? '🟢 Daily routine is ON (Dubai time): research ' + t.research + ', report ' + t.report + ', evening check ' + t.evening + '. /auto off stops it.'
+        : '⚪ Test mode: no daily routine. The team works only on what you ask, then stops. /auto on starts research ' + t.research + ', report ' + t.report + ', evening ' + t.evening + ' (Dubai).');
+    }
     case '/leads':
       if (!outreach) return null;
       return tg.sendFile(chatId, path.join(outreach.dir, 'leads.csv'), { caption: 'Lead sheet: ' + outreach.stats(24).totalLeads + ' leads' });
@@ -292,7 +302,7 @@ await tg.setCommands([
   { command: 'use', description: 'Pick a GPT / Gemini / Grok model' },
   { command: 'bigjob', description: 'Higher spending limit for the next job' },
   { command: 'browser', description: 'Is the AgenticCore browser running?' },
-  ...(cfg.outreach ? [{ command: 'report', description: 'Outreach report now' }, { command: 'send', description: 'Approve and send today\'s emails' }, { command: 'leads', description: 'Send me the lead sheet' }] : []),
+  ...(cfg.outreach ? [{ command: 'report', description: 'Outreach report now' }, { command: 'send', description: 'Approve and send today\'s emails' }, { command: 'leads', description: 'Send me the lead sheet' }, { command: 'auto', description: 'Daily routine on / off' }] : []),
   { command: 'help', description: 'Help' }
 ]);
 log(cfg.name + ' started — model ' + boss.modelId(boss.settings().model) + ', effort ' + boss.settings().effort + ', workspace ' + cfg.workspace);
