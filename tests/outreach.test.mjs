@@ -121,6 +121,7 @@ test('outreach edition: manager cannot use the browser, the scout can; a reserve
   assert.match(o.systemPrompt.append, /a@gmail\.com/);
   assert.match(o.systemPrompt.append, /Never keep browsing on your own/);
   assert.match(o.systemPrompt.append, /\/auto on/);
+  assert.match(o.systemPrompt.append, /no cold messages ever/);
   assert.match(o.agents.scout.prompt, /public pages only/);
   const nav = { url: 'https://example.com' };
   assert.equal((await o.canUseTool('mcp__browser__browser_navigate', nav, {})).behavior, 'deny');                   // manager

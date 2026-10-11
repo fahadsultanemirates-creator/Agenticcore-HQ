@@ -89,7 +89,7 @@ A third copy for the Global Outreach Plan (the .agency, .biz and .click brands; 
 powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\lite.ps1 -Edition outreach
 ```
 
-- Folder: `C:\AgenticCoreHQ-Outreach`. It has its own Telegram bot (a new token from @BotFather) and its own Edge window on port 9224. Log in to the outreach Gmail accounts in that window.
+- Folder: `C:\AgenticCoreHQ-Outreach`. It has its own Telegram bot (a new token from @BotFather) and its own Edge window on port 9224. Log in there to the outreach accounts only (the new Gmail, the new Facebook and the new WhatsApp Business), never to your main ones.
 - Set the sending accounts in `.env`: `OUTREACH_EMAIL_ACCOUNTS=a@gmail.com,b@gmail.com`. `OUTREACH_EMAIL_PER_ACCOUNT=8` is the daily cap per account.
 - The CRM is CSV sheets in `workspace\outreach`: `leads.csv`, `touches.csv`, `suppression.csv` and `ideas.csv`. Put the prepared campaign pack (templates, posts, videos) in `workspace\outreach\campaign`.
 - Rules enforced in code:

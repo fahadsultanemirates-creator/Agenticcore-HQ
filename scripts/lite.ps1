@@ -121,7 +121,7 @@ Write-Host "OK  '$btask' starts whenever $me logs in to the VPS"
 $up = $false
 try { $up = (Invoke-WebRequest "http://127.0.0.1:$port/json/version" -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200 } catch { }
 $sites = 'https://www.facebook.com/ https://web.whatsapp.com/'
-if ($Edition -eq 'outreach') { $sites = 'https://mail.google.com/' }
+if ($Edition -eq 'outreach') { $sites = 'https://mail.google.com/ https://www.facebook.com/ https://web.whatsapp.com/' }
 if (-not $up) { Start-Process -FilePath $edge -ArgumentList "$browserArgs $sites" }
 
 # ---------- 4. Lite's background task (starts with the VPS) ----------
@@ -138,7 +138,7 @@ Start-ScheduledTask -TaskName $task
 Write-Host "`nDone. $BotName is running next to HQ." -ForegroundColor Green
 if (-not $up) {
   Write-Host "A new Edge window opened: this is the $BotName browser (separate from the others)."
-  if ($Edition -eq 'outreach') { Write-Host '  Log in to the Gmail accounts used for outreach there too (one window, switch accounts in Gmail).' }
+  if ($Edition -eq 'outreach') { Write-Host '  Log in there to the NEW outreach accounts only: Gmail, Facebook and WhatsApp Business (scan the QR with the new phone).' }
   Write-Host '  1. Log in to Facebook and scan the WhatsApp Web QR code with your phone.'
   Write-Host '  2. Minimise it - never close it. Close Remote Desktop with the X, not Sign out.'
 }
