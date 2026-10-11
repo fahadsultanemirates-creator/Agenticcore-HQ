@@ -89,14 +89,15 @@ A third copy for the Global Outreach Plan (the .agency, .biz and .click brands; 
 powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\lite.ps1 -Edition outreach
 ```
 
-- Folder: `C:\AgenticCoreHQ-Outreach`. It has its own Telegram bot (a new token from @BotFather) and its own Edge window on port 9224. Log in to the outreach Gmail accounts in that window.
+- Folder: `C:\AgenticCoreHQ-Outreach`. It has its own Telegram bot (a new token from @BotFather) and its own Edge window on port 9224. Log in there to the outreach accounts only (the new Gmail, the new Facebook and the new WhatsApp Business), never to your main ones.
 - Set the sending accounts in `.env`: `OUTREACH_EMAIL_ACCOUNTS=a@gmail.com,b@gmail.com`. `OUTREACH_EMAIL_PER_ACCOUNT=8` is the daily cap per account.
 - The CRM is CSV sheets in `workspace\outreach`: `leads.csv`, `touches.csv`, `suppression.csv` and `ideas.csv`. Put the prepared campaign pack (templates, posts, videos) in `workspace\outreach\campaign`.
 - Rules enforced in code:
   - Leads need evidence and a personal hook. No Pakistan real estate. No duplicates within 90 days. The opt-out and bounce list is respected.
   - An email goes out only after you approve the day's batch, with one Send click per reserved email and each account's daily cap.
-- Daily, Dubai time: research at 03:00; the full report at 10:00 (the last 24 hours: activity, what got interest, what is not working, new data, field ideas, then the email batch for approval); the evening check at 20:30.
-- Commands: `/report` (the report now), `/send` (send today's approved emails), `/leads` (the sheet).
+- It starts in **test mode**: no daily jobs, it works only on what you ask and then stops. `/auto on` starts the daily routine and `/auto off` stops it.
+- With `/auto on`, daily, Dubai time: research at 03:00 (at most 15 new leads); the full report at 10:00 (the last 24 hours: activity, what got interest, what is not working, new data, field ideas, then the email batch for approval); the evening check at 20:30.
+- Commands: `/report` (the report now), `/send` (send today's approved emails), `/leads` (the sheet), `/auto on|off` (the daily routine).
 
 ## Using it
 
