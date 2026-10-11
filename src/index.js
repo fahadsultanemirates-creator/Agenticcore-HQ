@@ -16,6 +16,7 @@ import { makeScheduler } from './schedule.js';
 import { makeHqServer } from './tools.js';
 import { makeBoss, MODEL_ALIASES } from './boss.js';
 import { externalServers as externalServers_, accountsNote, findBlockedIds } from './mcp.js';
+import { makeOutreach, nextDubai, OUTREACH_JOBS } from './outreach.js';
 
 loadEnvFile();
 const cfg = readConfig();
@@ -52,11 +53,21 @@ const scheduler = makeScheduler(store, {
     else await tg.send(x.chatId, '⏰ Reminder: ' + x.text).catch(() => null);
   }
 });
-const hqServer = makeHqServer({ cfg, tg, providers, usage, scheduler, approvals, chatId: () => activeChat });
+const outreach = cfg.outreach ? makeOutreach({ dir: path.join(cfg.workspace, 'outreach'), accounts: cfg.outreachAccounts, emailCapPerAccount: cfg.outreachEmailCap }) : null;
+const hqServer = makeHqServer({ cfg, tg, providers, usage, scheduler, approvals, outreach, chatId: () => activeChat });
 const externalServers = externalServersSafe();
 let blockedIds = [];
 findBlockedIds(cfg).then((ids) => { blockedIds = ids; log('off-limits ids found: ' + ids.length); }).catch((e) => log('off-limits lookup failed: ' + e.message));
-boss = makeBoss({ cfg, tg, store, usage, approvals, hqServer, externalServers, accountsNote: accountsNote(cfg), blockedIds: () => blockedIds, log });
+boss = makeBoss({ cfg, tg, store, usage, approvals, hqServer, externalServers, accountsNote: accountsNote(cfg), blockedIds: () => blockedIds, outreach, log });
+
+// Outreach edition: the daily jobs (Dubai time), set up once; change or cancel them like any schedule.
+if (outreach && !store.read('state', {}).outreachSeeded) {
+  for (const [job, every] of [['research', 'daily'], ['report', 'daily'], ['evening', 'daily']]) {
+    scheduler.add({ when: nextDubai(cfg.outreachTimes[job]), every, kind: 'task', text: OUTREACH_JOBS[job], chatId: cfg.ownerId });
+  }
+  store.update('state', {}, (s) => { s.outreachSeeded = true; });
+  log('outreach: daily research ' + cfg.outreachTimes.research + ', report ' + cfg.outreachTimes.report + ', evening ' + cfg.outreachTimes.evening + ' (Dubai)');
+}
 
 function externalServersSafe() {
   try {
@@ -86,6 +97,7 @@ const HELP = [
   '/use gemini <model> — pick a model yourself (/use gemini auto = newest again)',
   '/bigjob 40 — let the next job spend up to $40 (for long campaigns or projects)',
   '/browser — is the AgenticCore browser on the VPS running?',
+  ...(cfg.outreach ? ['/report — the outreach report now (last 24h)', '/send — approve and send today\'s prepared emails', '/leads — send me the lead sheet'] : []),
   '/help — this list'
 ].join('\n');
 
@@ -145,6 +157,17 @@ async function command(chatId, text) {
         ? '🟢 The AgenticCore browser is running. I can use the sites you are logged into there.'
         : '🔴 The AgenticCore browser is not running. Connect to the VPS with Remote Desktop once — it starts when you log in. Then close the Remote Desktop window with the X (don\'t Sign out).');
     }
+    case '/report':
+      if (!outreach) return null;
+      boss.enqueue({ chatId, prompt: OUTREACH_JOBS.report });
+      return tg.send(chatId, '📊 Preparing the report…');
+    case '/send':
+      if (!outreach) return null;
+      boss.enqueue({ chatId, prompt: 'Ask Fahad to approve the email drafts prepared for today (outreach_request_email_batch) and, if approved, send them as instructed. If there are none, say so.' });
+      return tg.send(chatId, '📧 Getting today\'s emails ready for your approval…');
+    case '/leads':
+      if (!outreach) return null;
+      return tg.sendFile(chatId, path.join(outreach.dir, 'leads.csv'), { caption: 'Lead sheet: ' + outreach.stats(24).totalLeads + ' leads' });
     case '/use': {
       const key = PROVIDER_ALIASES[(rawArgs[0] || '').toLowerCase()];
       const id = (rawArgs[1] || '').trim();
@@ -269,6 +292,7 @@ await tg.setCommands([
   { command: 'use', description: 'Pick a GPT / Gemini / Grok model' },
   { command: 'bigjob', description: 'Higher spending limit for the next job' },
   { command: 'browser', description: 'Is the AgenticCore browser running?' },
+  ...(cfg.outreach ? [{ command: 'report', description: 'Outreach report now' }, { command: 'send', description: 'Approve and send today\'s emails' }, { command: 'leads', description: 'Send me the lead sheet' }] : []),
   { command: 'help', description: 'Help' }
 ]);
 log(cfg.name + ' started — model ' + boss.modelId(boss.settings().model) + ', effort ' + boss.settings().effort + ', workspace ' + cfg.workspace);

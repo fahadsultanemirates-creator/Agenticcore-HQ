@@ -7,6 +7,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { dayKey } from './usage.js';
+import { outreachTools } from './outreach.js';
 
 const ok = (text) => ({ content: [{ type: 'text', text: String(text) }] });
 const fail = (text) => ({ content: [{ type: 'text', text: String(text) }], isError: true });
@@ -155,6 +156,7 @@ export function hqTools(deps) {
       guarded(async () => ok(usage.report())))
   ];
 
+  if (deps.outreach) tools.push(...outreachTools({ outreach: deps.outreach, approvals: deps.approvals, tg, chatId: chat }));
   return tools;
 }
 

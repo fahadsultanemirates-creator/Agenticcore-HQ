@@ -4,7 +4,7 @@
 // (/new starts fresh). Jobs run one at a time; new messages wait in a queue.
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { HQ_PROMPT, LITE_PROMPT, SPECIALISTS, SCOUT } from './prompt.js';
+import { HQ_PROMPT, LITE_PROMPT, OUTREACH_PROMPT, SPECIALISTS, SCOUT, SCOUT_OUTREACH } from './prompt.js';
 import { classify, childEnv } from './guard.js';
 
 // "main" = the model set for this bot (HQ: Opus 5.5, Lite: Sonnet 5.5); the others are fixed models.
@@ -57,12 +57,12 @@ export function makeBoss(deps) {
   let jobCap = cfg.jobBudget;
   const external = deps.externalServers || {};
   const systemAppend = HQ_PROMPT.replace('# You are AgenticCore HQ', '# You are ' + cfg.name)
-    + (cfg.lite ? '\n\n' + LITE_PROMPT : '') + (deps.accountsNote ? '\n\n' + deps.accountsNote : '');
+    + (cfg.lite ? '\n\n' + LITE_PROMPT : '') + (cfg.outreach ? '\n\n' + OUTREACH_PROMPT.replace('{accounts}', cfg.outreachAccounts.join(', ') || '(none set yet)').replace('{cap}', String(cfg.outreachEmailCap)) : '') + (deps.accountsNote ? '\n\n' + deps.accountsNote : '');
   const servers = ['hq'].concat(Object.keys(external));
   function specialists() {
     const out = {};
     for (const [k, a] of Object.entries(SPECIALISTS)) out[k] = Object.assign({}, a, { model: cfg.helperModel, effort: cfg.helperEffort || a.effort, mcpServers: servers });
-    if (cfg.lite) out.scout = Object.assign({}, SCOUT, { model: cfg.scoutModel, effort: cfg.scoutEffort, mcpServers: servers });
+    if (cfg.lite) out.scout = Object.assign({}, SCOUT, { prompt: SCOUT.prompt + (cfg.outreach ? SCOUT_OUTREACH : ''), model: cfg.scoutModel, effort: cfg.scoutEffort, mcpServers: servers });
     return out;
   }
 
@@ -84,7 +84,14 @@ export function makeBoss(deps) {
       mcpServers: Object.assign({ hq: deps.hqServer }, external),
       agents: specialists(),
       permissionMode: 'default',
-      canUseTool: async (toolName, input) => {
+      canUseTool: async (toolName, input, opts = {}) => {
+        if (cfg.managerNoBrowser && !opts.agentID && toolName.startsWith('mcp__browser__')) {
+          return { behavior: 'deny', message: 'You do not use the browser yourself: hand this browsing to the scout helper (Task tool, subagent "scout") with exact instructions and what to bring back.' };
+        }
+        // An email Fahad approved in a batch and the bot reserved with outreach_reserve_send: one Send click is allowed.
+        if (deps.outreach && toolName === 'mcp__browser__browser_click' && /\bsend\b/i.test(String(input.element || '')) && deps.outreach.spendSendToken()) {
+          return { behavior: 'allow', updatedInput: input };
+        }
         const c = classify(toolName, input, { workspace: cfg.workspace, blocked: deps.blockedIds ? deps.blockedIds() : [] });
         if (c.decision === 'allow') return { behavior: 'allow', updatedInput: input };
         if (c.decision === 'deny') return { behavior: 'deny', message: 'Not allowed: ' + c.reason + '.' };
