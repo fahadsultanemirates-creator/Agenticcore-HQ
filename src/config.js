@@ -44,6 +44,12 @@ export function readConfig(env = process.env) {
     anthropicKey: e('ANTHROPIC_API_KEY'),
     name: e('HQ_NAME', 'AgenticCore HQ'),
     lite: e('HQ_LITE') === '1',          // the cost-effective edition (scripts/lite.ps1)
+    // Outreach edition (scripts/lite.ps1 -Edition outreach): lead sheet, email batches, daily jobs.
+    outreach: e('HQ_OUTREACH') === '1',
+    managerNoBrowser: e('HQ_MANAGER_NO_BROWSER') === '1',   // the manager must hand browsing to the scout
+    outreachAccounts: e('OUTREACH_EMAIL_ACCOUNTS').split(/[,;\s]+/).filter(Boolean),
+    outreachEmailCap: num(env.OUTREACH_EMAIL_PER_ACCOUNT, 8),
+    outreachTimes: { research: e('OUTREACH_RESEARCH_TIME', '03:00'), report: e('OUTREACH_REPORT_TIME', '10:00'), evening: e('OUTREACH_EVENING_TIME', '20:30') },
     model: e('HQ_MODEL', 'claude-opus-5-5'),
     // Specialist sub-agents: same model as the boss unless set; effort from each specialist unless set.
     helperModel: m('HQ_HELPER_MODEL', e('HQ_MODEL', 'claude-opus-5-5')),

@@ -81,6 +81,23 @@ It copies the code to `C:\AgenticCoreHQ-Lite`, reuses HQ's API keys, asks only f
 
 To update Lite later, run `powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ-Lite\scripts\update.ps1`. Each copy's `update.ps1` restarts only that copy.
 
+## AgenticCore Outreach (the field team for the outreach plan)
+
+A third copy for the Global Outreach Plan (the .agency, .biz and .click brands; Pakistan real estate and the PK/estate sites are out of scope). The Sonnet manager only talks and plans. It has no browser: research and Gmail sending go to the Haiku scout, and everything else goes to helpers or plain code.
+
+```
+powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\lite.ps1 -Edition outreach
+```
+
+- Folder: `C:\AgenticCoreHQ-Outreach`. It has its own Telegram bot (a new token from @BotFather) and its own Edge window on port 9224. Log in to the outreach Gmail accounts in that window.
+- Set the sending accounts in `.env`: `OUTREACH_EMAIL_ACCOUNTS=a@gmail.com,b@gmail.com`. `OUTREACH_EMAIL_PER_ACCOUNT=8` is the daily cap per account.
+- The CRM is CSV sheets in `workspace\outreach`: `leads.csv`, `touches.csv`, `suppression.csv` and `ideas.csv`. Put the prepared campaign pack (templates, posts, videos) in `workspace\outreach\campaign`.
+- Rules enforced in code:
+  - Leads need evidence and a personal hook. No Pakistan real estate. No duplicates within 90 days. The opt-out and bounce list is respected.
+  - An email goes out only after you approve the day's batch, with one Send click per reserved email and each account's daily cap.
+- Daily, Dubai time: research at 03:00; the full report at 10:00 (the last 24 hours: activity, what got interest, what is not working, new data, field ideas, then the email batch for approval); the evening check at 20:30.
+- Commands: `/report` (the report now), `/send` (send today's approved emails), `/leads` (the sheet).
+
 ## Using it
 
 Just talk to it: text or voice notes, in English, Urdu or Roman Urdu. Send photos or files and it saves them to its workspace.
