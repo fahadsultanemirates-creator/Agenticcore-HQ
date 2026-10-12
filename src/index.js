@@ -88,7 +88,7 @@ const HELP = [
   cfg.name + ' — your AI team. Just write or send a voice note.',
   '',
   '/new — start a fresh conversation (memory notes stay)',
-  '/stop — stop the current job',
+  '/stop — stop the current job (while I work, just write: I answer at once; "stop and …" switches to your new task)',
   '/status — what I\'m doing now',
   '/cost — spending (Claude per day, other AI calls)',
   '/budget 50 — raise today\'s Claude cap to $50',
@@ -217,9 +217,10 @@ async function onMessage(msg) {
 
   if (approvals.waiting && msg.text) {
     const t = msg.text.trim().toLowerCase().replace(/[.!]+$/, '');
-    const yes = /^(yes|y|allow|ok|okay|haan|han|ji|jee|ha|go ahead|approve|approved)$/.test(t);
+    const all = /^(yes all|allow all|all|sab|yes to all)$/.test(t);
+    const yes = all || /^(yes|y|allow|ok|okay|haan|han|ji|jee|ha|go ahead|approve|approved)$/.test(t);
     const no = /^(no|n|deny|nahi|nahin|na|stop|reject)$/.test(t);
-    if ((yes || no) && approvals.answerLatest(yes)) return tg.send(chatId, yes ? '✅ Allowed.' : '❌ Denied.');
+    if ((yes || no) && approvals.answerLatest(yes, all)) return tg.send(chatId, all ? '✅ Allowed for the rest of this job.' : yes ? '✅ Allowed.' : '❌ Denied.');
   }
 
   let prompt = msg.text || msg.caption || '';
@@ -247,8 +248,12 @@ async function onMessage(msg) {
   if (files.length) prompt = (prompt ? prompt + '\n\n' : 'Fahad sent this without a message — ask what he wants if it is not obvious.\n\n') + 'Attached (saved in the workspace): ' + files.join(', ');
   if (!prompt.trim()) return tg.send(chatId, 'I can read text, voice notes, photos and files. What would you like me to do?');
 
-  const pos = boss.enqueue({ chatId, prompt });
-  if (pos) await tg.send(chatId, '📝 Got it — I\'ll start on this as soon as the current job is done (' + pos + ' waiting). /stop cancels the current job.');
+  if (boss.status().busy) {                       // don't make him wait: quick answer now, or stop-and-switch
+    const q = await boss.quickReply(chatId, prompt);
+    if (q.action === 'now') await tg.send(chatId, '⏹ Stopping the current job to do this first…');
+    return;
+  }
+  boss.enqueue({ chatId, prompt });
 }
 
 async function onCallback(cb) {

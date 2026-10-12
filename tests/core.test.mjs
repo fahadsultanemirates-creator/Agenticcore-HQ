@@ -133,6 +133,17 @@ test('approvals: Allow resolves true, Deny false, timeouts deny', async () => {
   assert.equal(a2.waiting, 1);
   assert.equal(a2.answerLatest(true), true);   // typed "yes"
   assert.equal((await p4).allowed, true);
+  // "Allow all (this job)" button and typed "yes all"
+  const p5 = a2.request(1, 'click Post', 'x', { allowAll: true });
+  await new Promise((r) => setImmediate(r));
+  const kb = sent[sent.length - 1].extra.reply_markup.inline_keyboard;
+  assert.equal(kb[1][0].text, '✅ Allow all (this job)');
+  assert.equal(a2.handle(kb[1][0].callback_data), 'Allowed for the rest of this job');
+  assert.deepEqual(await p5, { allowed: true, note: undefined, all: true });
+  const p6 = a2.request(1, 'click Share', 'x', { allowAll: true });
+  await new Promise((r) => setImmediate(r));
+  a2.answerLatest(true, true);
+  assert.equal((await p6).all, true);
   assert.equal(a2.answerLatest(true), false);  // nothing left waiting
 });
 

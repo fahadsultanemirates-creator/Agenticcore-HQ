@@ -84,6 +84,20 @@ test('an allowed file outside the workspace does not ask again in the same job',
   assert.equal(approvals.asked, 2);   // a different file still asks
 });
 
+test('"Allow all (this job)" lets the rest of the job\'s browser clicks through, nothing else', async () => {
+  let opts;
+  const { boss } = setup({ results: [{ result: 'ok' }], onOptions: (o) => (opts = o) });
+  const approvals = setup.lastApprovals;
+  approvals.request = async (c, what, detail, o = {}) => { approvals.asked++; approvals.lastAllowAll = o.allowAll; return { allowed: true, all: !!o.allowAll }; };
+  boss.enqueue({ chatId: '7', prompt: 'x' }); await tick();
+  assert.equal((await opts.canUseTool('mcp__browser__browser_click', { element: 'Post button' })).behavior, 'allow');
+  assert.equal(approvals.asked, 1); assert.equal(approvals.lastAllowAll, true);
+  assert.equal((await opts.canUseTool('mcp__browser__browser_click', { element: 'Share button' })).behavior, 'allow');
+  assert.equal(approvals.asked, 1);   // no second question in the same job
+  await opts.canUseTool('Bash', { command: 'git push origin main' });
+  assert.equal(approvals.asked, 2); assert.equal(approvals.lastAllowAll, false);   // other risky steps still ask, without the all button
+});
+
 test('budget: a used-up day stops before running; a job that hits its limit says how to continue', async () => {
   const a = setup({ results: [{ result: 'x' }], budget: 1 });
   a.usage.addClaude(1);
@@ -144,4 +158,44 @@ test('hq tools: voice in the right language, files only from the workspace, no s
   assert.equal(secret.isError, true);
   await tools.remember.handler({ note: 'Prefers Roman Urdu replies' });
   assert.match(fs.readFileSync(path.join(ws, 'memory', 'notes.md'), 'utf8'), /Prefers Roman Urdu replies/);
+});
+
+test('while a job runs: a question gets a quick answer, a task is queued, "stop and…" switches at once', async () => {
+  const cfg = readConfig({ HQ_WORKSPACE: tmp(), ANTHROPIC_API_KEY: 'k', JOB_BUDGET_USD: '5', DAILY_BUDGET_USD: '30' });
+  const store = makeStore(tmp());
+  const sent = [];
+  const tg = { send: async (c, text) => { sent.push(text); return { message_id: 1 }; }, typing: () => null };
+  const prompts = [];
+  let quick = 'ANSWERED\nIt is posting the reel on Instagram, about 10 more minutes.';
+  const queryFn = ({ prompt, options }) => {
+    if (Array.isArray(options.tools) && options.tools.length === 0) {
+      assert.equal(options.model, 'claude-haiku-5-5');
+      return (async function* () { yield { type: 'result', subtype: 'success', is_error: false, result: quick, total_cost_usd: 0.001 }; })();
+    }
+    prompts.push(prompt);
+    return (async function* () {
+      yield { type: 'system', subtype: 'init', session_id: 's1' };
+      if (prompt === 'long job') await new Promise((r) => options.abortController.signal.addEventListener('abort', r));
+      yield { type: 'result', subtype: 'success', is_error: false, num_turns: 1, session_id: 's1', result: 'done: ' + prompt, total_cost_usd: 0.01 };
+    })();
+  };
+  const boss = makeBoss({ cfg, tg, store, usage: makeUsage(store, cfg), approvals: { request: async () => ({ allowed: true }), cancelAll() {} }, hqServer: {}, log: () => null, queryFn });
+  boss.enqueue({ chatId: '7', prompt: 'long job' }); await tick();
+  assert.equal(boss.status().busy, true);
+
+  const a = await boss.quickReply('7', 'what are you doing?');
+  assert.equal(a.action, 'answered');
+  assert.match(sent.at(-1), /^💬 It is posting the reel/);
+  assert.equal(boss.status().queued, 0);
+
+  quick = 'TASK\nI will do that right after the current job.';
+  const b = await boss.quickReply('7', 'also make a story');
+  assert.equal(b.action, 'queued');
+  assert.match(sent.at(-1), /Queued \(1 waiting\)/);
+
+  const c = await boss.quickReply('7', 'stop and send me the report now');
+  assert.equal(c.action, 'now');
+  await tick(); await tick();
+  assert.deepEqual(prompts, ['long job', 'stop and send me the report now', 'also make a story']);
+  assert.ok(sent.some((t) => /starting on your new message now/.test(t)));
 });
