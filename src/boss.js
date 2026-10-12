@@ -116,7 +116,7 @@ export function makeBoss(deps) {
 
   async function runOnce(chatId, prompt, sessionId) {
     const abort = new AbortController();
-    current = { chatId, abort, startedAt: Date.now(), activity: 'thinking', lastNote: Date.now() };
+    current = { chatId, abort, prompt, startedAt: Date.now(), activity: 'thinking', lastNote: Date.now() };
     const typing = setInterval(() => tg.typing(chatId), 5000);
     tg.typing(chatId);
     const progress = setInterval(() => {
@@ -169,7 +169,7 @@ export function makeBoss(deps) {
     store.update('sessions', {}, (s) => { s[chatId] = { sessionId: out.sessionId, lastTotal: total, at: new Date().toISOString() }; });
     log('job done: $' + spent.toFixed(4) + ', ' + (r ? r.subtype + ', ' + r.num_turns + ' turns' : 'no result'));
 
-    if (out.aborted) return tg.send(chatId, '⏹ Stopped. Tell me what to do next.');
+    if (out.aborted) return tg.send(chatId, queue.length && queue[0].chatId === chatId ? '⏹ Stopped that job — starting on your new message now (the earlier job\'s progress is kept in this conversation; say "continue the earlier job" later).' : '⏹ Stopped. Tell me what to do next.');
     if (!r) return tg.send(chatId, '⚠️ The job ended without an answer. Please send it again.');
     if (r.subtype === 'error_max_budget_usd') return tg.send(chatId, '💸 This job reached its spending limit ($' + Math.min(jobCap, usage.cap()).toFixed(2) + ') before finishing. Reply "continue" to let me carry on from where I stopped (or /bigjob 40 first for a bigger limit).');
     if (r.subtype === 'error_max_turns') return tg.send(chatId, '⏸ I paused after many steps. Reply "continue" and I\'ll carry on.');
@@ -207,6 +207,47 @@ export function makeBoss(deps) {
     return false;
   }
 
+  // Fahad wrote while a job is running: "stop and …" / "urgent …" stops the job and runs his message
+  // first; anything else gets a quick answer from a small model at once (no tools), which says
+  // whether the message is a new task (queued after the current job) or already answered.
+  const URGENT = /^\s*(stop( it)?( and| now|,)|urgent\b|now:|abhi\b|pehle\b|first:)/i;
+  function interrupt(job) {
+    queue.unshift(job);
+    approvals.cancelAll();
+    if (current) current.abort.abort();
+    else pump();
+  }
+  async function quickReply(chatId, text) {
+    if (!current) return { action: 'queued', position: enqueue({ chatId, prompt: text }) };
+    if (URGENT.test(text)) { interrupt({ chatId, prompt: text }); return { action: 'now' }; }
+    const job = current;
+    const sys = 'You are the quick-reply line of ' + cfg.name + ', Fahad\'s AI team on Telegram. The main team is busy with a job and cannot be interrupted, so you answer his message right away, briefly (1-4 short lines, his language). '
+      + 'You have no tools and cannot do work yourself. Never invent facts or results.\n'
+      + 'The running job (started ' + Math.round((Date.now() - job.startedAt) / 60000) + ' min ago) was asked: "' + String(job.prompt).slice(0, 600) + '"\nRight now it is: ' + job.activity + '. Jobs waiting after it: ' + queue.length + '.\n'
+      + 'Start your answer with exactly one tag on its own first line:\n'
+      + 'TASK - his message asks for work, a change, or something you cannot answer from this information: say it will start right after the current job, and that he can reply "stop and do it now" to switch.\n'
+      + 'NOW - he clearly wants the current job stopped or his new message done first.\n'
+      + 'ANSWERED - a question you fully answered (e.g. what the team is doing, how long, a simple fact or greeting).';
+    let out = '', spent = 0;
+    try {
+      for await (const m of runQuery({ prompt: text, options: {
+        model: modelId('haiku'), effort: 'low', systemPrompt: sys, tools: [], mcpServers: {}, settingSources: [], maxTurns: 1, cwd: cfg.workspace,
+        maxBudgetUsd: 0.1, canUseTool: async () => ({ behavior: 'deny', message: 'no tools in quick replies' }),
+        env: childEnv(process.env, { ANTHROPIC_API_KEY: cfg.anthropicKey })
+      } })) {
+        if (m.type === 'result') { out = String(m.result || ''); spent = Number(m.total_cost_usd) || 0; }
+      }
+    } catch (e) { log('quick reply: ' + (e && e.message || e)); }
+    usage.addClaude(spent);
+    const tag = (/^\s*(TASK|NOW|ANSWERED)\b/i.exec(out) || [])[1];
+    const body = out.replace(/^\s*(TASK|NOW|ANSWERED)\b[:\s-]*/i, '').trim();
+    if (tag && tag.toUpperCase() === 'NOW') { interrupt({ chatId, prompt: text }); return { action: 'now', text: body }; }
+    if (tag && tag.toUpperCase() === 'ANSWERED' && body) { await tg.send(chatId, '💬 ' + body); return { action: 'answered', text: body }; }
+    const position = enqueue({ chatId, prompt: text });
+    await tg.send(chatId, '💬 ' + (body || 'Got it.') + '\n📝 Queued (' + position + ' waiting) — reply "stop and do it now" to switch, /stop to cancel the current job.');
+    return { action: 'queued', position, text: body };
+  }
+
   function newConversation(chatId) { store.update('sessions', {}, (s) => { delete s[chatId]; }); }
 
   const status = () => current
@@ -216,5 +257,5 @@ export function makeBoss(deps) {
   // /bigjob 40 → the next job may spend up to $40 (still within today's cap).
   function setBigJob(usd) { nextJobBudget = usd > 0 ? usd : null; return nextJobBudget; }
 
-  return { enqueue, stop, status, newConversation, settings, modelId, setBigJob };
+  return { enqueue, stop, status, newConversation, settings, modelId, setBigJob, quickReply, interrupt };
 }
