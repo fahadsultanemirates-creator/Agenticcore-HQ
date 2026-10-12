@@ -72,6 +72,7 @@ export function makeBoss(deps) {
   function options(chatId, sessionId, abort) {
     const s = settings();
     const okFiles = new Set();   // files Fahad allowed in this job: later edits of the same file do not ask again
+    let browserAll = false;      // Fahad tapped "Allow all (this job)": the job's remaining browser clicks don't ask
     const fileKey = (input) => (input.file_path ? String(input.file_path).replace(/\//g, '\\').toLowerCase() : '');
     return {
       model: modelId(s.model),
@@ -97,9 +98,12 @@ export function makeBoss(deps) {
         if (c.decision === 'deny') return { behavior: 'deny', message: 'Not allowed: ' + c.reason + '.' };
         const key = fileKey(input);
         if (key && okFiles.has(key)) return { behavior: 'allow', updatedInput: input };
+        const browserStep = toolName.startsWith('mcp__browser__') && toolName !== 'mcp__browser__browser_run_code_unsafe';
+        if (browserStep && browserAll) return { behavior: 'allow', updatedInput: input };
         const detail = describeForApproval(input, key);
-        const r = await approvals.request(chatId, c.reason, detail);
+        const r = await approvals.request(chatId, c.reason, detail, { allowAll: browserStep });
         if (r.allowed && key) okFiles.add(key);
+        if (r.allowed && r.all && browserStep) browserAll = true;
         return r.allowed ? { behavior: 'allow', updatedInput: input } : { behavior: 'deny', message: 'Fahad did not approve this (' + (r.note || 'denied') + '). Do not try to do it another way; tell him what you would need.' };
       },
       resume: sessionId || undefined,

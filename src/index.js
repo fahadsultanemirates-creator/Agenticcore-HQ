@@ -217,9 +217,10 @@ async function onMessage(msg) {
 
   if (approvals.waiting && msg.text) {
     const t = msg.text.trim().toLowerCase().replace(/[.!]+$/, '');
-    const yes = /^(yes|y|allow|ok|okay|haan|han|ji|jee|ha|go ahead|approve|approved)$/.test(t);
+    const all = /^(yes all|allow all|all|sab|yes to all)$/.test(t);
+    const yes = all || /^(yes|y|allow|ok|okay|haan|han|ji|jee|ha|go ahead|approve|approved)$/.test(t);
     const no = /^(no|n|deny|nahi|nahin|na|stop|reject)$/.test(t);
-    if ((yes || no) && approvals.answerLatest(yes)) return tg.send(chatId, yes ? '✅ Allowed.' : '❌ Denied.');
+    if ((yes || no) && approvals.answerLatest(yes, all)) return tg.send(chatId, all ? '✅ Allowed for the rest of this job.' : yes ? '✅ Allowed.' : '❌ Denied.');
   }
 
   let prompt = msg.text || msg.caption || '';

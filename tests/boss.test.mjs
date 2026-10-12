@@ -84,6 +84,20 @@ test('an allowed file outside the workspace does not ask again in the same job',
   assert.equal(approvals.asked, 2);   // a different file still asks
 });
 
+test('"Allow all (this job)" lets the rest of the job\'s browser clicks through, nothing else', async () => {
+  let opts;
+  const { boss } = setup({ results: [{ result: 'ok' }], onOptions: (o) => (opts = o) });
+  const approvals = setup.lastApprovals;
+  approvals.request = async (c, what, detail, o = {}) => { approvals.asked++; approvals.lastAllowAll = o.allowAll; return { allowed: true, all: !!o.allowAll }; };
+  boss.enqueue({ chatId: '7', prompt: 'x' }); await tick();
+  assert.equal((await opts.canUseTool('mcp__browser__browser_click', { element: 'Post button' })).behavior, 'allow');
+  assert.equal(approvals.asked, 1); assert.equal(approvals.lastAllowAll, true);
+  assert.equal((await opts.canUseTool('mcp__browser__browser_click', { element: 'Share button' })).behavior, 'allow');
+  assert.equal(approvals.asked, 1);   // no second question in the same job
+  await opts.canUseTool('Bash', { command: 'git push origin main' });
+  assert.equal(approvals.asked, 2); assert.equal(approvals.lastAllowAll, false);   // other risky steps still ask, without the all button
+});
+
 test('budget: a used-up day stops before running; a job that hits its limit says how to continue', async () => {
   const a = setup({ results: [{ result: 'x' }], budget: 1 });
   a.usage.addClaude(1);
