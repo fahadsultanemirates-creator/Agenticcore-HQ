@@ -42,6 +42,11 @@ export function readConfig(env = process.env) {
     telegramToken: e('TELEGRAM_BOT_TOKEN'),
     ownerId: e('TELEGRAM_OWNER_ID'),
     anthropicKey: e('ANTHROPIC_API_KEY'),
+    // Gemini edition (scripts/lite-gemini.ps1): the Claude engine talks to a local gateway that
+    // translates to Gemini. Model names are the gateway's aliases (gemini-main, gemini-scout, ...).
+    engine: e('HQ_ENGINE', 'claude'),
+    baseUrl: e('ANTHROPIC_BASE_URL'),
+    fastModel: e('HQ_FAST_MODEL'),
     name: e('HQ_NAME', 'AgenticCore HQ'),
     lite: e('HQ_LITE') === '1',          // the cost-effective edition (scripts/lite.ps1)
     // Outreach edition (scripts/lite.ps1 -Edition outreach): lead sheet, email batches, daily jobs.

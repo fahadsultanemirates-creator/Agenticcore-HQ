@@ -1,0 +1,71 @@
+// Lite on Gemini: the engine is pointed at the local gateway, model names are the gateway's
+// aliases, quick replies use the fast model, and HQ / Outreach (no gateway) are unchanged.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { readConfig } from '../src/config.js';
+import { makeBoss } from '../src/boss.js';
+import { makeStore } from '../src/store.js';
+import { makeUsage } from '../src/usage.js';
+
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'gem-'));
+const tick = () => new Promise((r) => setTimeout(r, 20));
+
+function run(env) {
+  const cfg = readConfig(Object.assign({ HQ_WORKSPACE: tmp(), ANTHROPIC_API_KEY: 'k' }, env));
+  const store = makeStore(tmp());
+  const seen = [];
+  const queryFn = ({ prompt, options }) => {
+    seen.push(options);
+    const hold = prompt === 'long';
+    return (async function* () {
+      if (hold) await new Promise((r) => options.abortController.signal.addEventListener('abort', r));
+      yield { type: 'result', subtype: 'success', is_error: false, result: 'ANSWERED\nok', total_cost_usd: 0, num_turns: 1, session_id: 's' };
+    })();
+  };
+  const boss = makeBoss({ cfg, tg: { send: async () => ({}), typing: () => null }, store, usage: makeUsage(store, cfg), approvals: { request: async () => ({ allowed: false }), cancelAll() {} }, hqServer: {}, log: () => null, queryFn });
+  return { boss, seen, cfg };
+}
+
+const GEMINI = { HQ_LITE: '1', HQ_ENGINE: 'gemini', ANTHROPIC_API_KEY: 'sk-gw-x', ANTHROPIC_BASE_URL: 'http://127.0.0.1:4123', HQ_MODEL: 'gemini-main', HQ_EFFORT: 'medium',
+  HQ_HELPER_MODEL: 'gemini-helper', HQ_SCOUT_MODEL: 'gemini-scout', HQ_MODEL_HARD: 'gemini-hard', HQ_FAST_MODEL: 'gemini-scout' };
+
+test('Lite on Gemini: engine goes through the gateway with the Gemini aliases', async () => {
+  const { boss, seen } = run(GEMINI);
+  boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
+  const o = seen[0];
+  assert.equal(o.model, 'gemini-main');
+  assert.equal(o.effort, 'medium');
+  assert.equal(o.env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:4123');
+  assert.equal(o.env.ANTHROPIC_API_KEY, 'sk-gw-x');
+  assert.equal(o.env.DISABLE_PROMPT_CACHING, '1');
+  assert.equal(o.env.ANTHROPIC_SMALL_FAST_MODEL, 'gemini-scout');
+  assert.equal(o.agents.scout.model, 'gemini-scout');
+  assert.equal(o.agents.marketing.model, 'gemini-helper');
+  assert.match(o.systemPrompt.append, /Gemini edition/);
+  assert.equal(boss.modelId('fable'), 'gemini-hard');
+  assert.equal(boss.modelId('haiku'), 'gemini-scout');
+});
+
+test('Lite on Gemini: quick replies while busy use the fast Gemini model through the gateway', async () => {
+  const { boss, seen } = run(GEMINI);
+  boss.enqueue({ chatId: '1', prompt: 'long' }); await tick();
+  await boss.quickReply('1', 'what are you doing?');
+  const q = seen.find((o) => Array.isArray(o.tools) && o.tools.length === 0);
+  assert.equal(q.model, 'gemini-scout');
+  assert.equal(q.env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:4123');
+  boss.stop();
+});
+
+test('HQ and Outreach without a gateway are unchanged (Claude, no base URL, no Gemini prompt)', async () => {
+  for (const env of [{}, { HQ_LITE: '1', HQ_OUTREACH: '1' }]) {
+    const { boss, seen } = run(env);
+    boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
+    assert.equal(seen[0].env.ANTHROPIC_BASE_URL, undefined);
+    assert.equal(seen[0].env.DISABLE_PROMPT_CACHING, undefined);
+    assert.ok(!/Gemini edition/.test(seen[0].systemPrompt.append));
+    assert.match(boss.modelId('haiku'), /^claude-haiku/);
+  }
+});
