@@ -10,6 +10,11 @@ $task = 'AgenticCore HQ'
 $envFile = Join-Path $Dir '.env'
 if (Test-Path $envFile) { $l = Get-Content $envFile | Where-Object { $_ -like 'HQ_TASK=*' } | Select-Object -First 1; if ($l) { $task = $l.Substring(8).Trim() } }
 git pull --ff-only
+if ($LASTEXITCODE -ne 0) {
+  Write-Host 'The update stopped: git could not bring in the new code (see the message above). Nothing was restarted.' -ForegroundColor Red
+  Write-Host ('If it says a file has local changes, undo them with:  git -C "' + $Dir + '" checkout -- <file>   and run this again.') -ForegroundColor Yellow
+  exit 1
+}
 npm install --omit=dev --no-audit --no-fund | Out-Host
 Stop-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue
 # Stop only this copy's bot (older versions ran "node src/index.js" without a folder: that was always HQ).

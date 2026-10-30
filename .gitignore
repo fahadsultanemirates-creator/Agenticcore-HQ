@@ -5,3 +5,4 @@ logs/
 workspace/
 home/
 *.log
+gateway/

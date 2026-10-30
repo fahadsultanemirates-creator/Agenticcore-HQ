@@ -146,16 +146,18 @@ $yaml += "litellm_settings:`n  drop_params: true`n  num_retries: 2`n  request_ti
 Set-Content -Path (Join-Path $gwDir 'config.yaml') -Value $yaml -Encoding ASCII
 
 # The gateway runner: reads the keys from .env at start, so keys never sit in the task or the yaml.
+# LiteLLM writes its normal messages to stderr; Start-Process sends them to a file instead of
+# PowerShell, which would otherwise treat the first one as an error and stop the runner.
 $runner = @"
-`$ErrorActionPreference = 'Stop'
+`$ErrorActionPreference = 'Continue'
 `$envFile = '$envFile'
 foreach (`$l in (Get-Content `$envFile)) {
   if (`$l -like 'GEMINI_API_KEY=*') { `$env:GEMINI_API_KEY = `$l.Substring(15) }
   if (`$l -like 'GATEWAY_KEY=*') { `$env:GATEWAY_KEY = `$l.Substring(12) }
 }
 `$env:PYTHONIOENCODING = 'utf-8'
-`$log = '$gwDir\gateway.log'
-& '$gwDir\venv\Scripts\litellm.exe' --config '$gwDir\config.yaml' --host 127.0.0.1 --port $Port *>> `$log
+`$p = Start-Process -FilePath '$gwDir\venv\Scripts\litellm.exe' -ArgumentList '--config', '"$gwDir\config.yaml"', '--host', '127.0.0.1', '--port', '$Port' -WorkingDirectory '$gwDir' -RedirectStandardOutput '$gwDir\gateway.log' -RedirectStandardError '$gwDir\gateway-errors.log' -NoNewWindow -Wait -PassThru
+exit `$p.ExitCode
 "@
 Set-Content -Path (Join-Path $gwDir 'run-gateway.ps1') -Value $runner -Encoding ASCII
 
@@ -188,6 +190,8 @@ Save-Env
 # ---------- 6. Start the gateway, check it, restart Lite ----------
 Stop-ScheduledTask -TaskName $GwTask -ErrorAction SilentlyContinue
 Get-CimInstance Win32_Process -Filter "Name='litellm.exe'" | Where-Object { $_.CommandLine -like "*$gwDir*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object { $_.CommandLine -like "*$gwDir*litellm*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+Start-Sleep -Seconds 2
 Start-ScheduledTask -TaskName $GwTask
 Write-Host 'Starting the gateway ...'
 $up = $false
@@ -195,7 +199,7 @@ for ($i = 0; $i -lt 40 -and -not $up; $i++) {
   Start-Sleep -Seconds 3
   try { $up = (Invoke-WebRequest "http://127.0.0.1:$Port/health/liveliness" -UseBasicParsing -TimeoutSec 3).StatusCode -eq 200 } catch { }
 }
-if (-not $up) { throw "The gateway did not start. Look at $gwDir\gateway.log (send it to Claude), or run this script with -Revert to go back to Claude." }
+if (-not $up) { throw "The gateway did not start. Look at $gwDir\gateway-errors.log and gateway.log (send them to Claude), or run this script with -Revert to go back to Claude." }
 Write-Host 'OK  gateway running on 127.0.0.1 (local only)'
 try {
   $body = '{"model":"gemini-main","max_tokens":50,"messages":[{"role":"user","content":"Reply with the word ready."}]}'
