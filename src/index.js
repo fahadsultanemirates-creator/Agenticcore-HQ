@@ -144,7 +144,7 @@ async function command(chatId, text) {
           if (all) lines.push('  choices: ' + (await p.candidates()).slice(0, 12).join(', ') + '\n');
         } catch (e) { lines.push(p.name + ': error — ' + e.message); }
       }
-      return tg.send(chatId, 'Claude: ' + boss.modelId(s.model) + ' (effort ' + s.effort + ')\n' + lines.join('\n') + (all ? '\nTo pick one: /use gemini <model>' : ''));
+      return tg.send(chatId, 'Engine (' + (cfg.engine === 'gemini' ? 'Gemini' : 'Claude') + '): ' + boss.modelId(s.model) + ' (effort ' + s.effort + ')\n' + lines.join('\n') + (all ? '\nTo pick one: /use gemini <model>' : ''));
     }
     case '/bigjob': {
       const n = Number(arg);

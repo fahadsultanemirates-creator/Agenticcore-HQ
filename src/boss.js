@@ -160,6 +160,11 @@ export function makeBoss(deps) {
     nextJobBudget = null;
     const sessions = store.read('sessions', {});
     let prev = fresh ? null : sessions[chatId];
+    // A conversation started on another engine (Claude <-> Gemini) can't be continued: start fresh.
+    if (prev && (prev.engine || 'claude') !== cfg.engine) {
+      log('engine changed (' + (prev.engine || 'claude') + ' -> ' + cfg.engine + '): starting a fresh conversation');
+      prev = null;
+    }
     let out;
     try {
       out = await runOnce(chatId, prompt, prev && prev.sessionId);
@@ -174,7 +179,7 @@ export function makeBoss(deps) {
     const total = r ? Number(r.total_cost_usd) || 0 : 0;
     const spent = prev && prev.sessionId === out.sessionId && total >= (prev.lastTotal || 0) ? total - (prev.lastTotal || 0) : total;
     usage.addClaude(spent);
-    store.update('sessions', {}, (s) => { s[chatId] = { sessionId: out.sessionId, lastTotal: total, at: new Date().toISOString() }; });
+    store.update('sessions', {}, (s) => { s[chatId] = { sessionId: out.sessionId, lastTotal: total, at: new Date().toISOString(), engine: cfg.engine }; });
     log('job done: $' + spent.toFixed(4) + ', ' + (r ? r.subtype + ', ' + r.num_turns + ' turns' : 'no result'));
 
     if (out.aborted) return tg.send(chatId, queue.length && queue[0].chatId === chatId ? '⏹ Stopped that job — starting on your new message now (the earlier job\'s progress is kept in this conversation; say "continue the earlier job" later).' : '⏹ Stopped. Tell me what to do next.');

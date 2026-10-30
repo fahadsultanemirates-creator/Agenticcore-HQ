@@ -69,3 +69,22 @@ test('HQ and Outreach without a gateway are unchanged (Claude, no base URL, no G
     assert.match(boss.modelId('haiku'), /^claude-haiku/);
   }
 });
+
+test('switching engines starts a fresh conversation instead of resuming the other engine\'s one', async () => {
+  const dataDir = tmp();
+  const ws = tmp();
+  const sessionFor = async (env) => {
+    const cfg = readConfig(Object.assign({ HQ_WORKSPACE: ws, ANTHROPIC_API_KEY: 'k' }, env));
+    const store = makeStore(dataDir);
+    const seen = [];
+    const queryFn = ({ options }) => { seen.push(options); return (async function* () { yield { type: 'result', subtype: 'success', is_error: false, result: 'ok', total_cost_usd: 0, num_turns: 1, session_id: 's-' + cfg.engine }; })(); };
+    const boss = makeBoss({ cfg, tg: { send: async () => ({}), typing: () => null }, store, usage: makeUsage(store, cfg), approvals: { request: async () => ({ allowed: true }), cancelAll() {} }, hqServer: {}, log: () => null, queryFn });
+    boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
+    return seen[0].resume;
+  };
+  assert.equal(await sessionFor({ HQ_LITE: '1' }), undefined);          // first Claude job: new conversation
+  assert.equal(await sessionFor({ HQ_LITE: '1' }), 's-claude');         // next Claude job continues it
+  assert.equal(await sessionFor(GEMINI), undefined);                    // switched to Gemini: fresh
+  assert.equal(await sessionFor(GEMINI), 's-gemini');                   // Gemini continues its own
+  assert.equal(await sessionFor({ HQ_LITE: '1' }), undefined);          // back to Claude: fresh again
+});
