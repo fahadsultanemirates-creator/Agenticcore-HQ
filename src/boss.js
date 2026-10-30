@@ -4,7 +4,7 @@
 // (/new starts fresh). Jobs run one at a time; new messages wait in a queue.
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { HQ_PROMPT, LITE_PROMPT, OUTREACH_PROMPT, SPECIALISTS, SCOUT, SCOUT_OUTREACH } from './prompt.js';
+import { HQ_PROMPT, LITE_PROMPT, OUTREACH_PROMPT, GEMINI_PROMPT, SPECIALISTS, SCOUT, SCOUT_OUTREACH } from './prompt.js';
 import { classify, childEnv } from './guard.js';
 
 // "main" = the model set for this bot (HQ: Opus 5.5, Lite: Sonnet 5.5); the others are fixed models.
@@ -57,7 +57,7 @@ export function makeBoss(deps) {
   let jobCap = cfg.jobBudget;
   const external = deps.externalServers || {};
   const systemAppend = HQ_PROMPT.replace('# You are AgenticCore HQ', '# You are ' + cfg.name)
-    + (cfg.lite ? '\n\n' + LITE_PROMPT : '') + (cfg.outreach ? '\n\n' + OUTREACH_PROMPT.replace('{accounts}', cfg.outreachAccounts.join(', ') || '(none set yet)').replace('{cap}', String(cfg.outreachEmailCap)) : '') + (deps.accountsNote ? '\n\n' + deps.accountsNote : '');
+    + (cfg.lite ? '\n\n' + LITE_PROMPT : '') + (cfg.outreach ? '\n\n' + OUTREACH_PROMPT.replace('{accounts}', cfg.outreachAccounts.join(', ') || '(none set yet)').replace('{cap}', String(cfg.outreachEmailCap)) : '') + (cfg.engine === 'gemini' ? '\n\n' + GEMINI_PROMPT : '') + (deps.accountsNote ? '\n\n' + deps.accountsNote : '');
   const servers = ['hq'].concat(Object.keys(external));
   function specialists() {
     const out = {};
@@ -67,7 +67,15 @@ export function makeBoss(deps) {
   }
 
   const settings = () => store.read('settings', { model: 'main', effort: cfg.effort });
-  function modelId(alias) { const k = MODEL_ALIASES[alias] || MODEL_ALIASES.main; return cfg[k] || k; }
+  function modelId(alias) {
+    if (alias === 'haiku' && cfg.fastModel) return cfg.fastModel;   // Gemini edition: the gateway's quick model
+    const k = MODEL_ALIASES[alias] || MODEL_ALIASES.main; return cfg[k] || k;
+  }
+  // Engine environment: the API key, plus the local Gemini gateway when one is set.
+  function engineEnv(extra = {}) {
+    const gw = cfg.baseUrl ? { ANTHROPIC_BASE_URL: cfg.baseUrl, DISABLE_PROMPT_CACHING: '1', ANTHROPIC_DEFAULT_HAIKU_MODEL: cfg.fastModel || cfg.scoutModel, ANTHROPIC_SMALL_FAST_MODEL: cfg.fastModel || cfg.scoutModel } : {};
+    return childEnv(process.env, Object.assign({ ANTHROPIC_API_KEY: cfg.anthropicKey }, gw, extra));
+  }
 
   function options(chatId, sessionId, abort) {
     const s = settings();
@@ -109,7 +117,7 @@ export function makeBoss(deps) {
       resume: sessionId || undefined,
       maxBudgetUsd: Math.min(jobCap, Math.max(0.5, usage.left())),
       abortController: abort,
-      env: childEnv(process.env, Object.assign({ ANTHROPIC_API_KEY: cfg.anthropicKey }, cfg.ghToken ? { GH_TOKEN: cfg.ghToken } : {})),
+      env: engineEnv(cfg.ghToken ? { GH_TOKEN: cfg.ghToken } : {}),
       stderr: (d) => log('claude: ' + String(d).trim().slice(0, 500))
     };
   }
@@ -233,7 +241,7 @@ export function makeBoss(deps) {
       for await (const m of runQuery({ prompt: text, options: {
         model: modelId('haiku'), effort: 'low', systemPrompt: sys, tools: [], mcpServers: {}, settingSources: [], maxTurns: 1, cwd: cfg.workspace,
         maxBudgetUsd: 0.1, canUseTool: async () => ({ behavior: 'deny', message: 'no tools in quick replies' }),
-        env: childEnv(process.env, { ANTHROPIC_API_KEY: cfg.anthropicKey })
+        env: engineEnv()
       } })) {
         if (m.type === 'result') { out = String(m.result || ''); spent = Number(m.total_cost_usd) || 0; }
       }

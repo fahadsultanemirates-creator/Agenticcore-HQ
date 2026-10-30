@@ -81,6 +81,26 @@ It copies the code to `C:\AgenticCoreHQ-Lite`, reuses HQ's API keys, asks only f
 
 To update Lite later, run `powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ-Lite\scripts\update.ps1`. Each copy's `update.ps1` restarts only that copy.
 
+## Lite on Gemini (optional)
+
+Lite can run on Gemini instead of Claude. HQ and Outreach are not affected. Lite keeps the whole framework (tools, browser, approvals, budgets, Telegram). A small local gateway (LiteLLM, on 127.0.0.1 only) translates the Claude engine's requests to Gemini, using `GEMINI_API_KEY` from Lite's `.env`.
+
+```
+powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ-Lite\scripts\lite-gemini.ps1          # switch to Gemini
+powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ-Lite\scripts\lite-gemini.ps1 -Revert  # back to Claude
+```
+
+| Role | Model (looked up from your key) | Thinking |
+|---|---|---|
+| Manager (talks with you) | newest `gemini-3.8-flash` | medium |
+| Helpers | same as the manager | medium |
+| Scout and quick replies | newest `gemini-3.5-flash` | low |
+| Hard jobs (`/model fable`) | newest `gemini-4` pro | high |
+
+- To force a specific id, set `LITE_GEMINI_MAIN`, `LITE_GEMINI_HELPER`, `LITE_GEMINI_SCOUT` or `LITE_GEMINI_HARD` in `.env` and run the script again.
+- The script installs Python and LiteLLM if needed. It registers the task "AgenticCore Lite Gateway" (starts with the VPS) and keeps the old Claude settings so `-Revert` can restore them.
+- The `$` figures in `/cost` are estimates on Gemini. The real bill is in Google AI Studio, so set a spend limit there.
+
 ## AgenticCore Outreach (the field team for the outreach plan)
 
 A third copy for the Global Outreach Plan (the .agency, .biz and .click brands; Pakistan real estate and the PK/estate sites are out of scope). The Sonnet manager only talks and plans. It has no browser: research and Gmail sending go to the Haiku scout, and everything else goes to helpers or plain code.
