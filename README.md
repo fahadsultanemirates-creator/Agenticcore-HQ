@@ -99,6 +99,7 @@ powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ-Lite\scripts\lite-gemi
 
 - To force a specific id, set `LITE_GEMINI_MAIN`, `LITE_GEMINI_HELPER`, `LITE_GEMINI_SCOUT` or `LITE_GEMINI_HARD` in `.env` and run the script again.
 - The script installs Python and LiteLLM if needed. It registers the task "AgenticCore Lite Gateway" (starts with the VPS) and keeps the old Claude settings so `-Revert` can restore them.
+- **Several Gemini keys** (for example a free-tier project and a paid one): add one line per key to Lite's `.env`, like `GEMINI_KEY_FREE=...` and `GEMINI_KEY_PAID=...`, then run the script again. In Telegram, `/key` shows the keys and which one is in use, and `/key free` switches at once (no restart). `/key default` goes back to `GEMINI_API_KEY`. Keys are only ever typed on the VPS.
 - The `$` figures in `/cost` are estimates on Gemini. The real bill is in Google AI Studio, so set a spend limit there.
 
 ## AgenticCore Outreach (the field team for the outreach plan)

@@ -88,3 +88,29 @@ test('switching engines starts a fresh conversation instead of resuming the othe
   assert.equal(await sessionFor(GEMINI), 's-gemini');                   // Gemini continues its own
   assert.equal(await sessionFor({ HQ_LITE: '1' }), undefined);          // back to Claude: fresh again
 });
+
+test('/key switches every Gemini model (manager, helpers, scout, quick model) to the named key', async () => {
+  const { boss, seen, cfg } = run(Object.assign({}, GEMINI, { GEMINI_KEY_FREE: 'k1', GEMINI_KEY_PAID: 'k2', GEMINI_KEY_EMPTY: '' }));
+  assert.deepEqual(cfg.geminiKeys, ['free', 'paid']);            // empty lines are ignored
+  assert.equal(boss.keyName(), '');                               // default key first
+  boss.setKey('free');
+  assert.equal(boss.keyName(), 'free');
+  boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
+  const o = seen.at(-1);
+  assert.equal(o.model, 'gemini-main-free');
+  assert.equal(o.agents.scout.model, 'gemini-scout-free');
+  assert.equal(o.agents.marketing.model, 'gemini-helper-free');
+  assert.equal(o.env.ANTHROPIC_SMALL_FAST_MODEL, 'gemini-scout-free');
+  assert.equal(boss.modelId('fable'), 'gemini-hard-free');
+  boss.setKey('');                                                // back to the default key
+  assert.equal(boss.modelId('main'), 'gemini-main');
+  boss.setKey('nope');                                            // unknown names never reach the models
+  assert.equal(boss.modelId('main'), 'gemini-main');
+});
+
+test('/key has no effect on Claude bots', async () => {
+  const { boss } = run({ HQ_LITE: '1', GEMINI_KEY_FREE: 'k1' });
+  boss.setKey('free');
+  assert.equal(boss.keyName(), '');
+  assert.match(boss.modelId('main'), /^claude-/);
+});

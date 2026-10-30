@@ -95,6 +95,7 @@ const HELP = [
   '/model main | opus | sonnet | haiku | fable — which Claude leads (now: {model})',
   '/effort low | medium | high | xhigh | max — how hard I think (now: {effort})',
   '/models — the GPT / Gemini / Grok models I\'m using (/models all = the choices)',
+  ...(cfg.engine === 'gemini' ? ['/key — which Gemini key is in use; /key <name> switches (keys are added on the VPS)'] : []),
   '/use gemini <model> — pick a model yourself (/use gemini auto = newest again)',
   '/bigjob 40 — let the next job spend up to $40 (for long campaigns or projects)',
   '/browser — is the AgenticCore browser on the VPS running?',
@@ -120,6 +121,19 @@ async function command(chatId, text) {
       return tg.send(chatId, st.busy ? '🔧 Working (' + st.minutes + ' min): ' + st.activity + (st.queued ? '\n' + st.queued + ' message(s) waiting.' : '') : '🟢 Free. Model: ' + s.model + ', effort: ' + s.effort + '.\nToday: $' + usage.today().claude.toFixed(2) + ' of $' + usage.cap().toFixed(2));
     }
     case '/cost': return tg.send(chatId, usage.report());
+    case '/key': {
+      if (cfg.engine !== 'gemini') return tg.send(chatId, 'Key switching is for the Gemini edition (this bot runs on Claude).');
+      const names = ['default'].concat(cfg.geminiKeys);
+      const want = (rawArgs[0] || '').toLowerCase();
+      if (!want) {
+        const active = boss.keyName() || 'default';
+        return tg.send(chatId, '🔑 Gemini key in use: ' + active + '\nAvailable: ' + names.map((n) => (n === active ? n + ' ✅' : n)).join(', ')
+          + '\nSwitch: /key <name>' + (cfg.geminiKeys.length ? '' : '\n(Add more on the VPS: GEMINI_KEY_<NAME>=... in .env, then run scripts\\lite-gemini.ps1 again.)'));
+      }
+      if (!names.includes(want)) return tg.send(chatId, 'No key called "' + want + '". Available: ' + names.join(', '));
+      boss.setKey(want === 'default' ? '' : want);
+      return tg.send(chatId, '🔑 Switched to the "' + want + '" Gemini key. The next message uses it' + (boss.status().busy ? ' (the job running now finishes on the old key).' : '.'));
+    }
     case '/budget': {
       const n = Number(arg.replace(/[$,]/g, ''));
       if (!(n > 0 && n <= 1000)) return tg.send(chatId, 'Send an amount in dollars, e.g. /budget 50');
@@ -144,7 +158,7 @@ async function command(chatId, text) {
           if (all) lines.push('  choices: ' + (await p.candidates()).slice(0, 12).join(', ') + '\n');
         } catch (e) { lines.push(p.name + ': error — ' + e.message); }
       }
-      return tg.send(chatId, 'Engine (' + (cfg.engine === 'gemini' ? 'Gemini' : 'Claude') + '): ' + boss.modelId(s.model) + ' (effort ' + s.effort + ')\n' + lines.join('\n') + (all ? '\nTo pick one: /use gemini <model>' : ''));
+      return tg.send(chatId, 'Engine (' + (cfg.engine === 'gemini' ? 'Gemini, key: ' + (boss.keyName() || 'default') : 'Claude') + '): ' + boss.modelId(s.model) + ' (effort ' + s.effort + ')\n' + lines.join('\n') + (all ? '\nTo pick one: /use gemini <model>' : ''));
     }
     case '/bigjob': {
       const n = Number(arg);
@@ -304,6 +318,7 @@ await tg.setCommands([
   { command: 'model', description: 'opus | fable | sonnet' },
   { command: 'effort', description: 'low … max' },
   { command: 'models', description: 'Which AI models are in use' },
+  ...(cfg.engine === 'gemini' ? [{ command: 'key', description: 'Which Gemini key / switch key' }] : []),
   { command: 'use', description: 'Pick a GPT / Gemini / Grok model' },
   { command: 'bigjob', description: 'Higher spending limit for the next job' },
   { command: 'browser', description: 'Is the AgenticCore browser running?' },

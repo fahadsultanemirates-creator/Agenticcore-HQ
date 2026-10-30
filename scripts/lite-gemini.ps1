@@ -11,6 +11,10 @@
 #   LITE_GEMINI_HELPER helpers                     same as main              (thinking: medium)
 #   LITE_GEMINI_SCOUT  scout + quick replies       newest gemini-3.5-flash   (thinking: low)
 #   LITE_GEMINI_HARD   hard jobs (/model fable)    newest gemini-4 pro       (thinking: high)
+#
+# More Gemini keys (e.g. a free-tier project and a paid one): add one line per key to .env,
+#   GEMINI_KEY_FREE=...   GEMINI_KEY_PAID=...   (any name: letters, digits, _)
+# and run this script again. In Telegram, /key shows them and /key free switches (no restart).
 param([switch]$Revert)
 
 $ErrorActionPreference = 'Stop'
@@ -129,14 +133,24 @@ Write-Host 'OK  LiteLLM installed'
 # ---------- 3. Gateway settings ----------
 $gwKey = Get-Val 'GATEWAY_KEY'
 if (-not $gwKey) { $gwKey = 'sk-gw-' + ([guid]::NewGuid().ToString('N')) }
-function Entry($alias, $model, $effort) {
-  return "  - model_name: $alias`n    litellm_params:`n      model: gemini/$model`n      api_key: os.environ/GEMINI_API_KEY`n      reasoning_effort: $effort`n"
+function Entry($alias, $model, $effort, $keyVar = 'GEMINI_API_KEY') {
+  return "  - model_name: $alias`n    litellm_params:`n      model: gemini/$model`n      api_key: os.environ/$keyVar`n      reasoning_effort: $effort`n"
 }
+# Extra named keys (GEMINI_KEY_<NAME>=...): each gets its own set of aliases, e.g. gemini-main-free.
+$extraKeys = @($lines | Where-Object { $_ -match '^GEMINI_KEY_[A-Za-z0-9_]+=.+' } | ForEach-Object { ($_ -split '=', 2)[0] })
 $yaml = "model_list:`n"
 $yaml += Entry 'gemini-main' $main 'medium'
 $yaml += Entry 'gemini-helper' $helper 'medium'
 $yaml += Entry 'gemini-scout' $scout 'low'
 $yaml += Entry 'gemini-hard' $hard 'high'
+foreach ($kv in $extraKeys) {
+  $name = $kv.Substring(11).ToLower()
+  $yaml += Entry ('gemini-main-' + $name) $main 'medium' $kv
+  $yaml += Entry ('gemini-helper-' + $name) $helper 'medium' $kv
+  $yaml += Entry ('gemini-scout-' + $name) $scout 'low' $kv
+  $yaml += Entry ('gemini-hard-' + $name) $hard 'high' $kv
+  Write-Host "OK  extra key '$name' (switch with /key $name in Telegram)"
+}
 # Safety net: any Claude model name that reaches the gateway still lands on Gemini.
 $yaml += Entry 'claude-haiku-5-5' $scout 'low'
 $yaml += Entry 'claude-sonnet-5-5' $main 'medium'
@@ -153,6 +167,7 @@ $runner = @"
 `$envFile = '$envFile'
 foreach (`$l in (Get-Content `$envFile)) {
   if (`$l -like 'GEMINI_API_KEY=*') { `$env:GEMINI_API_KEY = `$l.Substring(15) }
+  if (`$l -match '^GEMINI_KEY_[A-Za-z0-9_]+=') { `$kv = `$l -split '=', 2; Set-Item -Path ('env:' + `$kv[0]) -Value `$kv[1] }
   if (`$l -like 'GATEWAY_KEY=*') { `$env:GATEWAY_KEY = `$l.Substring(12) }
 }
 `$env:PYTHONIOENCODING = 'utf-8'

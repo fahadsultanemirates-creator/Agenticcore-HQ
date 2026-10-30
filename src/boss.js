@@ -61,19 +61,24 @@ export function makeBoss(deps) {
   const servers = ['hq'].concat(Object.keys(external));
   function specialists() {
     const out = {};
-    for (const [k, a] of Object.entries(SPECIALISTS)) out[k] = Object.assign({}, a, { model: cfg.helperModel, effort: cfg.helperEffort || a.effort, mcpServers: servers });
-    if (cfg.lite) out.scout = Object.assign({}, SCOUT, { prompt: SCOUT.prompt + (cfg.outreach ? SCOUT_OUTREACH : ''), model: cfg.scoutModel, effort: cfg.scoutEffort, mcpServers: servers });
+    for (const [k, a] of Object.entries(SPECIALISTS)) out[k] = Object.assign({}, a, { model: withKey(cfg.helperModel), effort: cfg.helperEffort || a.effort, mcpServers: servers });
+    if (cfg.lite) out.scout = Object.assign({}, SCOUT, { prompt: SCOUT.prompt + (cfg.outreach ? SCOUT_OUTREACH : ''), model: withKey(cfg.scoutModel), effort: cfg.scoutEffort, mcpServers: servers });
     return out;
   }
 
   const settings = () => store.read('settings', { model: 'main', effort: cfg.effort });
+  // Gemini edition: /key <name> picks which Gemini key the gateway uses (aliases like gemini-main-free).
+  const keyName = () => { const k = settings().key; return cfg.engine === 'gemini' && k && cfg.geminiKeys.includes(k) ? k : ''; };
+  const withKey = (id) => (keyName() && /^gemini-(main|helper|scout|hard)$/.test(id) ? id + '-' + keyName() : id);
   function modelId(alias) {
-    if (alias === 'haiku' && cfg.fastModel) return cfg.fastModel;   // Gemini edition: the gateway's quick model
-    const k = MODEL_ALIASES[alias] || MODEL_ALIASES.main; return cfg[k] || k;
+    if (alias === 'haiku' && cfg.fastModel) return withKey(cfg.fastModel);   // Gemini edition: the gateway's quick model
+    const k = MODEL_ALIASES[alias] || MODEL_ALIASES.main; return withKey(cfg[k] || k);
   }
+  function setKey(name) { store.write('settings', Object.assign({}, settings(), { key: name || '' })); }
   // Engine environment: the API key, plus the local Gemini gateway when one is set.
   function engineEnv(extra = {}) {
-    const gw = cfg.baseUrl ? { ANTHROPIC_BASE_URL: cfg.baseUrl, DISABLE_PROMPT_CACHING: '1', ANTHROPIC_DEFAULT_HAIKU_MODEL: cfg.fastModel || cfg.scoutModel, ANTHROPIC_SMALL_FAST_MODEL: cfg.fastModel || cfg.scoutModel } : {};
+    const fast = withKey(cfg.fastModel || cfg.scoutModel);
+    const gw = cfg.baseUrl ? { ANTHROPIC_BASE_URL: cfg.baseUrl, DISABLE_PROMPT_CACHING: '1', ANTHROPIC_DEFAULT_HAIKU_MODEL: fast, ANTHROPIC_SMALL_FAST_MODEL: fast } : {};
     return childEnv(process.env, Object.assign({ ANTHROPIC_API_KEY: cfg.anthropicKey }, gw, extra));
   }
 
@@ -84,7 +89,7 @@ export function makeBoss(deps) {
     const fileKey = (input) => (input.file_path ? String(input.file_path).replace(/\//g, '\\').toLowerCase() : '');
     return {
       model: modelId(s.model),
-      fallbackModel: modelId(s.model) === cfg.model ? undefined : cfg.model,
+      fallbackModel: modelId(s.model) === withKey(cfg.model) ? undefined : withKey(cfg.model),
       effort: s.effort || cfg.effort,
       thinking: { type: 'adaptive' },
       cwd: cfg.workspace,
@@ -270,5 +275,5 @@ export function makeBoss(deps) {
   // /bigjob 40 → the next job may spend up to $40 (still within today's cap).
   function setBigJob(usd) { nextJobBudget = usd > 0 ? usd : null; return nextJobBudget; }
 
-  return { enqueue, stop, status, newConversation, settings, modelId, setBigJob, quickReply, interrupt };
+  return { enqueue, stop, status, newConversation, settings, modelId, setBigJob, quickReply, interrupt, setKey, keyName };
 }

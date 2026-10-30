@@ -47,6 +47,8 @@ export function readConfig(env = process.env) {
     engine: e('HQ_ENGINE', 'claude'),
     baseUrl: e('ANTHROPIC_BASE_URL'),
     fastModel: e('HQ_FAST_MODEL'),
+    // Extra Gemini keys named in .env as GEMINI_KEY_<NAME>; /key <name> switches between them.
+    geminiKeys: Object.keys(env).filter((k) => /^GEMINI_KEY_[A-Za-z0-9_]+$/.test(k) && String(env[k]).trim()).map((k) => k.slice(11).toLowerCase()),
     name: e('HQ_NAME', 'AgenticCore HQ'),
     lite: e('HQ_LITE') === '1',          // the cost-effective edition (scripts/lite.ps1)
     // Outreach edition (scripts/lite.ps1 -Edition outreach): lead sheet, email batches, daily jobs.
