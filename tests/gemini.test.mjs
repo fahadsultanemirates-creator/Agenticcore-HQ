@@ -88,3 +88,73 @@ test('switching engines starts a fresh conversation instead of resuming the othe
   assert.equal(await sessionFor(GEMINI), 's-gemini');                   // Gemini continues its own
   assert.equal(await sessionFor({ HQ_LITE: '1' }), undefined);          // back to Claude: fresh again
 });
+
+test('/key switches every Gemini model (manager, helpers, scout, quick model) to the named key', async () => {
+  const { boss, seen, cfg } = run(Object.assign({}, GEMINI, { GEMINI_KEY_FREE: 'k1', GEMINI_KEY_PAID: 'k2', GEMINI_KEY_EMPTY: '' }));
+  assert.deepEqual(cfg.geminiKeys, ['free', 'paid']);            // empty lines are ignored
+  assert.equal(boss.keyName(), '');                               // default key first
+  boss.setKey('free');
+  assert.equal(boss.keyName(), 'free');
+  boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
+  const o = seen.at(-1);
+  assert.equal(o.model, 'gemini-main-free');
+  assert.equal(o.agents.scout.model, 'gemini-scout-free');
+  assert.equal(o.agents.marketing.model, 'gemini-helper-free');
+  assert.equal(o.env.ANTHROPIC_SMALL_FAST_MODEL, 'gemini-scout-free');
+  assert.equal(boss.modelId('fable'), 'gemini-hard-free');
+  boss.setKey('');                                                // back to the default key
+  assert.equal(boss.modelId('main'), 'gemini-main');
+  boss.setKey('nope');                                            // unknown names never reach the models
+  assert.equal(boss.modelId('main'), 'gemini-main');
+});
+
+test('/key has no effect on Claude bots', async () => {
+  const { boss } = run({ HQ_LITE: '1', GEMINI_KEY_FREE: 'k1' });
+  boss.setKey('free');
+  assert.equal(boss.keyName(), '');
+  assert.match(boss.modelId('main'), /^claude-/);
+});
+
+test('automatic key switching: on a limit error Lite moves to the next key, says so, and carries on; the paid default is last', async () => {
+  const cfg = readConfig(Object.assign({ HQ_WORKSPACE: tmp(), ANTHROPIC_API_KEY: 'k' }, GEMINI, { GEMINI_KEY_FREE1: 'a', GEMINI_KEY_FREE2: 'b' }));
+  const store = makeStore(tmp());
+  const sent = [], models = [], prompts = [];
+  let limitedUntil = 3;                    // the first 3 runs hit the limit
+  const queryFn = ({ prompt, options }) => {
+    if (Array.isArray(options.tools) && options.tools.length === 0) return (async function* () {})();
+    models.push(options.model); prompts.push(prompt);
+    const limited = models.length <= limitedUntil;
+    return (async function* () {
+      yield { type: 'system', subtype: 'init', session_id: 's1' };
+      yield limited
+        ? { type: 'result', subtype: 'success', is_error: true, result: 'API Error: 429 {"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}', session_id: 's1', total_cost_usd: 0 }
+        : { type: 'result', subtype: 'success', is_error: false, result: 'done', session_id: 's1', total_cost_usd: 0, num_turns: 1 };
+    })();
+  };
+  const boss = makeBoss({ cfg, tg: { send: async (c, t) => { sent.push(t); return {}; }, typing: () => null }, store, usage: makeUsage(store, cfg), approvals: { request: async () => ({ allowed: true }), cancelAll() {} }, hqServer: {}, log: () => null, queryFn });
+
+  limitedUntil = 2;                        // free1 and free2 are used up, the paid default works
+  boss.enqueue({ chatId: '1', prompt: 'do it' }); await tick(); await tick();
+  assert.deepEqual(models, ['gemini-main-free1', 'gemini-main-free2', 'gemini-main']);
+  assert.match(sent[0], /Using the "free1" Gemini key first/);
+  assert.ok(sent.some((t) => /"free1" Gemini key reached its limit — switched to "free2"/.test(t)));
+  assert.ok(sent.some((t) => /"free2" Gemini key reached its limit — switched to "default" \(the paid key\)/.test(t)));
+  assert.equal(sent.at(-1), 'done');
+  assert.match(prompts[1], /Continue the task from where you stopped/);
+  assert.equal(boss.keyName(), '');        // stays on the paid key for the rest of the day
+
+  // every key used up: one clear message, no endless loop
+  models.length = 0; limitedUntil = 99;
+  boss.enqueue({ chatId: '1', prompt: 'again' }); await tick(); await tick();
+  assert.equal(models.length, 1);
+  assert.match(sent.at(-1), /Every Gemini key, including the paid default one, has reached its limit/);
+});
+
+test('automatic key switching can be turned off (GEMINI_KEY_AUTO=0) and never touches Claude bots', async () => {
+  const off = run(Object.assign({}, GEMINI, { GEMINI_KEY_FREE1: 'a', GEMINI_KEY_AUTO: '0' }));
+  off.boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
+  assert.equal(off.seen[0].model, 'gemini-main');          // stays on the default key; only /key switches
+  const claude = run({ HQ_LITE: '1', GEMINI_KEY_FREE1: 'a' });
+  claude.boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
+  assert.match(claude.seen[0].model, /^claude-/);
+});

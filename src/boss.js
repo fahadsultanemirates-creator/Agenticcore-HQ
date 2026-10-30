@@ -61,19 +61,49 @@ export function makeBoss(deps) {
   const servers = ['hq'].concat(Object.keys(external));
   function specialists() {
     const out = {};
-    for (const [k, a] of Object.entries(SPECIALISTS)) out[k] = Object.assign({}, a, { model: cfg.helperModel, effort: cfg.helperEffort || a.effort, mcpServers: servers });
-    if (cfg.lite) out.scout = Object.assign({}, SCOUT, { prompt: SCOUT.prompt + (cfg.outreach ? SCOUT_OUTREACH : ''), model: cfg.scoutModel, effort: cfg.scoutEffort, mcpServers: servers });
+    for (const [k, a] of Object.entries(SPECIALISTS)) out[k] = Object.assign({}, a, { model: withKey(cfg.helperModel), effort: cfg.helperEffort || a.effort, mcpServers: servers });
+    if (cfg.lite) out.scout = Object.assign({}, SCOUT, { prompt: SCOUT.prompt + (cfg.outreach ? SCOUT_OUTREACH : ''), model: withKey(cfg.scoutModel), effort: cfg.scoutEffort, mcpServers: servers });
     return out;
   }
 
   const settings = () => store.read('settings', { model: 'main', effort: cfg.effort });
+  // Gemini edition: /key <name> picks which Gemini key the gateway uses (aliases like gemini-main-free).
+  const keyName = () => { const k = settings().key; return cfg.engine === 'gemini' && k && cfg.geminiKeys.includes(k) ? k : ''; };
+  const withKey = (id) => (keyName() && /^gemini-(main|helper|scout|hard)$/.test(id) ? id + '-' + keyName() : id);
   function modelId(alias) {
-    if (alias === 'haiku' && cfg.fastModel) return cfg.fastModel;   // Gemini edition: the gateway's quick model
-    const k = MODEL_ALIASES[alias] || MODEL_ALIASES.main; return cfg[k] || k;
+    if (alias === 'haiku' && cfg.fastModel) return withKey(cfg.fastModel);   // Gemini edition: the gateway's quick model
+    const k = MODEL_ALIASES[alias] || MODEL_ALIASES.main; return withKey(cfg[k] || k);
+  }
+  function setKey(name) { store.write('settings', Object.assign({}, settings(), { key: name || '', keyDay: pacificDay() })); }
+  // Free-tier limits reset at midnight Pacific time: the key order starts again from the first key.
+  const pacificDay = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+  const LIMIT = /\b429\b|rate.?limit|quota|resource.?exhausted|too many requests/i;
+  const autoKeys = () => cfg.engine === 'gemini' && cfg.geminiKeyAuto && cfg.geminiKeys.length > 0;
+  const keyLabel = (k) => k || 'default';
+  async function newDayKeys(chatId) {
+    const s = settings();
+    if (!autoKeys() || s.keyDay === pacificDay()) return;
+    const first = cfg.geminiKeys[0];
+    const was = keyName();
+    setKey(first);                                   // also records today's date
+    if (was === first) return;
+    await tg.send(chatId, s.keyDay ? '🔑 New day for the free limits: back to the "' + first + '" key.' : '🔑 Using the "' + first + '" Gemini key first; I switch to the next key by myself when one reaches its limit, and tell you.').catch(() => null);
+  }
+  // The current key hit its limit: switch to the next one and say so. false when none is left.
+  async function nextKey(chatId) {
+    const order = cfg.geminiKeys.concat(['']);
+    const i = order.indexOf(keyName());
+    if (i < 0 || i >= order.length - 1) return false;
+    const from = keyLabel(order[i]), to = keyLabel(order[i + 1]);
+    setKey(order[i + 1]);
+    log('key limit: ' + from + ' -> ' + to);
+    await tg.send(chatId, '🔑 The "' + from + '" Gemini key reached its limit — switched to "' + to + '"' + (order[i + 1] ? '.' : ' (the paid key).') + ' Continuing.').catch(() => null);
+    return true;
   }
   // Engine environment: the API key, plus the local Gemini gateway when one is set.
   function engineEnv(extra = {}) {
-    const gw = cfg.baseUrl ? { ANTHROPIC_BASE_URL: cfg.baseUrl, DISABLE_PROMPT_CACHING: '1', ANTHROPIC_DEFAULT_HAIKU_MODEL: cfg.fastModel || cfg.scoutModel, ANTHROPIC_SMALL_FAST_MODEL: cfg.fastModel || cfg.scoutModel } : {};
+    const fast = withKey(cfg.fastModel || cfg.scoutModel);
+    const gw = cfg.baseUrl ? { ANTHROPIC_BASE_URL: cfg.baseUrl, DISABLE_PROMPT_CACHING: '1', ANTHROPIC_DEFAULT_HAIKU_MODEL: fast, ANTHROPIC_SMALL_FAST_MODEL: fast } : {};
     return childEnv(process.env, Object.assign({ ANTHROPIC_API_KEY: cfg.anthropicKey }, gw, extra));
   }
 
@@ -84,7 +114,7 @@ export function makeBoss(deps) {
     const fileKey = (input) => (input.file_path ? String(input.file_path).replace(/\//g, '\\').toLowerCase() : '');
     return {
       model: modelId(s.model),
-      fallbackModel: modelId(s.model) === cfg.model ? undefined : cfg.model,
+      fallbackModel: modelId(s.model) === withKey(cfg.model) ? undefined : withKey(cfg.model),
       effort: s.effort || cfg.effort,
       thinking: { type: 'adaptive' },
       cwd: cfg.workspace,
@@ -165,6 +195,7 @@ export function makeBoss(deps) {
       log('engine changed (' + (prev.engine || 'claude') + ' -> ' + cfg.engine + '): starting a fresh conversation');
       prev = null;
     }
+    await newDayKeys(chatId);
     let out;
     try {
       out = await runOnce(chatId, prompt, prev && prev.sessionId);
@@ -173,7 +204,15 @@ export function makeBoss(deps) {
         log('resume failed, starting fresh: ' + e.message);
         prev = null;
         out = await runOnce(chatId, prompt, null);
+      } else if (autoKeys() && LIMIT.test(String(e && e.message))) {
+        out = { result: { is_error: true, subtype: 'error_during_execution', result: String(e.message) }, sessionId: prev && prev.sessionId, aborted: false };
       } else throw e;
+    }
+    // A Gemini key hit its limit: move to the next key and carry on in the same conversation.
+    while (autoKeys() && !out.aborted && out.result && (out.result.is_error || out.result.subtype !== 'success') && LIMIT.test(String(out.result.result || '')) && await nextKey(chatId)) {
+      const again = 'The last step failed because the Gemini key reached its usage limit; it has now been switched to another key. Continue the task from where you stopped.';
+      try { out = await runOnce(chatId, out.sessionId ? again : prompt, out.sessionId || null); }
+      catch (e) { if (!LIMIT.test(String(e && e.message))) throw e; out = { result: { is_error: true, subtype: 'error_during_execution', result: String(e.message) }, sessionId: out.sessionId, aborted: false }; }
     }
     const r = out.result;
     const total = r ? Number(r.total_cost_usd) || 0 : 0;
@@ -186,6 +225,7 @@ export function makeBoss(deps) {
     if (!r) return tg.send(chatId, '⚠️ The job ended without an answer. Please send it again.');
     if (r.subtype === 'error_max_budget_usd') return tg.send(chatId, '💸 This job reached its spending limit ($' + Math.min(jobCap, usage.cap()).toFixed(2) + ') before finishing. Reply "continue" to let me carry on from where I stopped (or /bigjob 40 first for a bigger limit).');
     if (r.subtype === 'error_max_turns') return tg.send(chatId, '⏸ I paused after many steps. Reply "continue" and I\'ll carry on.');
+    if (autoKeys() && LIMIT.test(String(r.result || '')) && !keyName()) return tg.send(chatId, '🔑 Every Gemini key, including the paid default one, has reached its limit. Check billing / limits in Google AI Studio, or switch with /key.');
     if (r.is_error || r.subtype !== 'success') return tg.send(chatId, '⚠️ I hit a problem: ' + String(r.result || r.subtype || 'unknown error').slice(0, 800) + '\nYour conversation is kept — reply to continue, or /new to start fresh.');
     const text = String(r.result || '').trim();
     return tg.send(chatId, text || '✅ Done.');
@@ -270,5 +310,5 @@ export function makeBoss(deps) {
   // /bigjob 40 → the next job may spend up to $40 (still within today's cap).
   function setBigJob(usd) { nextJobBudget = usd > 0 ? usd : null; return nextJobBudget; }
 
-  return { enqueue, stop, status, newConversation, settings, modelId, setBigJob, quickReply, interrupt };
+  return { enqueue, stop, status, newConversation, settings, modelId, setBigJob, quickReply, interrupt, setKey, keyName };
 }
