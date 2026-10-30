@@ -77,7 +77,7 @@ export function makeBoss(deps) {
   function setKey(name) { store.write('settings', Object.assign({}, settings(), { key: name || '', keyDay: pacificDay() })); }
   // Free-tier limits reset at midnight Pacific time: the key order starts again from the first key.
   const pacificDay = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
-  const LIMIT = /\b429\b|rate.?limit|quota|resource.?exhausted|too many requests/i;
+  const LIMIT = /\b429\b|rate.?limit|quota|resource.?exhausted|too many requests|\b402\b|payment required|billing/i;   // limit reached, or no credit left
   const autoKeys = () => cfg.engine === 'gemini' && cfg.geminiKeyAuto && cfg.geminiKeys.length > 0;
   const keyLabel = (k) => k || 'default';
   async function newDayKeys(chatId) {
@@ -225,7 +225,7 @@ export function makeBoss(deps) {
     if (!r) return tg.send(chatId, '⚠️ The job ended without an answer. Please send it again.');
     if (r.subtype === 'error_max_budget_usd') return tg.send(chatId, '💸 This job reached its spending limit ($' + Math.min(jobCap, usage.cap()).toFixed(2) + ') before finishing. Reply "continue" to let me carry on from where I stopped (or /bigjob 40 first for a bigger limit).');
     if (r.subtype === 'error_max_turns') return tg.send(chatId, '⏸ I paused after many steps. Reply "continue" and I\'ll carry on.');
-    if (autoKeys() && LIMIT.test(String(r.result || '')) && !keyName()) return tg.send(chatId, '🔑 Every Gemini key, including the paid default one, has reached its limit. Check billing / limits in Google AI Studio, or switch with /key.');
+    if (autoKeys() && LIMIT.test(String(r.result || '')) && !keyName()) return tg.send(chatId, '🔑 Every Gemini key is out: the free ones reached their limits and the paid default key was refused (limit reached, or no credit / billing problem). Add credit or check billing in Google AI Studio, or switch with /key.');
     if (r.is_error || r.subtype !== 'success') return tg.send(chatId, '⚠️ I hit a problem: ' + String(r.result || r.subtype || 'unknown error').slice(0, 800) + '\nYour conversation is kept — reply to continue, or /new to start fresh.');
     const text = String(r.result || '').trim();
     return tg.send(chatId, text || '✅ Done.');

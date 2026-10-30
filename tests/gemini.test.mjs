@@ -147,7 +147,7 @@ test('automatic key switching: on a limit error Lite moves to the next key, says
   models.length = 0; limitedUntil = 99;
   boss.enqueue({ chatId: '1', prompt: 'again' }); await tick(); await tick();
   assert.equal(models.length, 1);
-  assert.match(sent.at(-1), /Every Gemini key, including the paid default one, has reached its limit/);
+  assert.match(sent.at(-1), /Every Gemini key is out/);
 });
 
 test('automatic key switching can be turned off (GEMINI_KEY_AUTO=0) and never touches Claude bots', async () => {
@@ -157,4 +157,23 @@ test('automatic key switching can be turned off (GEMINI_KEY_AUTO=0) and never to
   const claude = run({ HQ_LITE: '1', GEMINI_KEY_FREE1: 'a' });
   claude.boss.enqueue({ chatId: '1', prompt: 'x' }); await tick();
   assert.match(claude.seen[0].model, /^claude-/);
+});
+
+test('a key refused for payment (402, no credit) is treated like a used-up key', async () => {
+  const cfg = readConfig(Object.assign({ HQ_WORKSPACE: tmp(), ANTHROPIC_API_KEY: 'k' }, GEMINI, { GEMINI_KEY_FREE1: 'a', GEMINI_KEY_FREE2: 'b' }));
+  const store = makeStore(tmp());
+  const sent = [], models = [];
+  const queryFn = ({ options }) => {
+    if (Array.isArray(options.tools) && options.tools.length === 0) return (async function* () {})();
+    models.push(options.model);
+    const bad = models.length === 1;
+    return (async function* () {
+      yield bad ? { type: 'result', subtype: 'success', is_error: true, result: 'API Error: 402 Payment Required', session_id: 's1', total_cost_usd: 0 }
+        : { type: 'result', subtype: 'success', is_error: false, result: 'ok', session_id: 's1', total_cost_usd: 0, num_turns: 1 };
+    })();
+  };
+  const boss = makeBoss({ cfg, tg: { send: async (c, t) => { sent.push(t); return {}; }, typing: () => null }, store, usage: makeUsage(store, cfg), approvals: { request: async () => ({ allowed: true }), cancelAll() {} }, hqServer: {}, log: () => null, queryFn });
+  boss.enqueue({ chatId: '1', prompt: 'x' }); await tick(); await tick();
+  assert.deepEqual(models, ['gemini-main-free1', 'gemini-main-free2']);
+  assert.equal(sent.at(-1), 'ok');
 });
