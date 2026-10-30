@@ -95,7 +95,7 @@ const HELP = [
   '/model main | opus | sonnet | haiku | fable — which Claude leads (now: {model})',
   '/effort low | medium | high | xhigh | max — how hard I think (now: {effort})',
   '/models — the GPT / Gemini / Grok models I\'m using (/models all = the choices)',
-  ...(cfg.engine === 'gemini' ? ['/key — which Gemini key is in use; /key <name> switches (keys are added on the VPS)'] : []),
+  ...(cfg.engine === 'gemini' ? ['/key — which Gemini key is in use; /key <name> switches (automatic: the next key takes over when one reaches its limit, and I tell you)'] : []),
   '/use gemini <model> — pick a model yourself (/use gemini auto = newest again)',
   '/bigjob 40 — let the next job spend up to $40 (for long campaigns or projects)',
   '/browser — is the AgenticCore browser on the VPS running?',
