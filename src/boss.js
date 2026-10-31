@@ -90,6 +90,9 @@ export function makeBoss(deps) {
     await tg.send(chatId, s.keyDay ? '🔑 New day for the free limits: back to the "' + first + '" key.' : '🔑 Using the "' + first + '" Gemini key first; I switch to the next key by myself when one reaches its limit, and tell you.').catch(() => null);
   }
   // The current key hit its limit: switch to the next one and say so. false when none is left.
+  // A per-minute limit (Google: requests or tokens per minute) clears within a minute; a daily one doesn't.
+  // So before giving up on a key, wait about a minute and try the same key once more.
+  const minuteWaitMs = () => (cfg.geminiMinuteWaitMs >= 0 ? cfg.geminiMinuteWaitMs : 65000);
   async function nextKey(chatId) {
     const order = cfg.geminiKeys.concat(['']);
     const i = order.indexOf(keyName());
@@ -209,7 +212,15 @@ export function makeBoss(deps) {
       } else throw e;
     }
     // A Gemini key hit its limit: move to the next key and carry on in the same conversation.
-    while (autoKeys() && !out.aborted && out.result && (out.result.is_error || out.result.subtype !== 'success') && LIMIT.test(String(out.result.result || '')) && await nextKey(chatId)) {
+    const limited = () => autoKeys() && !out.aborted && out.result && (out.result.is_error || out.result.subtype !== 'success') && LIMIT.test(String(out.result.result || ''));
+    if (limited() && !/\b402\b|payment required|billing/i.test(String(out.result.result || ''))) {
+      log('gemini limit on "' + keyLabel(keyName()) + '": waiting ' + Math.round(minuteWaitMs() / 1000) + 's, then trying the same key once more');
+      await new Promise((r) => setTimeout(r, minuteWaitMs()));
+      const again = 'The last step was paused by a per-minute usage limit; continue the task from where you stopped.';
+      try { out = await runOnce(chatId, out.sessionId ? again : prompt, out.sessionId || null); }
+      catch (e) { if (!LIMIT.test(String(e && e.message))) throw e; out = { result: { is_error: true, subtype: 'error_during_execution', result: String(e.message) }, sessionId: out.sessionId, aborted: false }; }
+    }
+    while (limited() && await nextKey(chatId)) {
       const again = 'The last step failed because the Gemini key reached its usage limit; it has now been switched to another key. Continue the task from where you stopped.';
       try { out = await runOnce(chatId, out.sessionId ? again : prompt, out.sessionId || null); }
       catch (e) { if (!LIMIT.test(String(e && e.message))) throw e; out = { result: { is_error: true, subtype: 'error_during_execution', result: String(e.message) }, sessionId: out.sessionId, aborted: false }; }

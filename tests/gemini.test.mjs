@@ -29,7 +29,7 @@ function run(env) {
   return { boss, seen, cfg };
 }
 
-const GEMINI = { HQ_LITE: '1', HQ_ENGINE: 'gemini', ANTHROPIC_API_KEY: 'sk-gw-x', ANTHROPIC_BASE_URL: 'http://127.0.0.1:4123', HQ_MODEL: 'gemini-main', HQ_EFFORT: 'medium',
+const GEMINI = { GEMINI_MINUTE_WAIT_MS: '0', HQ_LITE: '1', HQ_ENGINE: 'gemini', ANTHROPIC_API_KEY: 'sk-gw-x', ANTHROPIC_BASE_URL: 'http://127.0.0.1:4123', HQ_MODEL: 'gemini-main', HQ_EFFORT: 'medium',
   HQ_HELPER_MODEL: 'gemini-helper', HQ_SCOUT_MODEL: 'gemini-scout', HQ_MODEL_HARD: 'gemini-hard', HQ_FAST_MODEL: 'gemini-scout' };
 
 test('Lite on Gemini: engine goes through the gateway with the Gemini aliases', async () => {
@@ -133,20 +133,21 @@ test('automatic key switching: on a limit error Lite moves to the next key, says
   };
   const boss = makeBoss({ cfg, tg: { send: async (c, t) => { sent.push(t); return {}; }, typing: () => null }, store, usage: makeUsage(store, cfg), approvals: { request: async () => ({ allowed: true }), cancelAll() {} }, hqServer: {}, log: () => null, queryFn });
 
-  limitedUntil = 2;                        // free1 and free2 are used up, the paid default works
+  limitedUntil = 3;                        // free1 (tried twice: per-minute retry) and free2 are used up, the paid default works
   boss.enqueue({ chatId: '1', prompt: 'do it' }); await tick(); await tick();
-  assert.deepEqual(models, ['gemini-main-free1', 'gemini-main-free2', 'gemini-main']);
+  assert.deepEqual(models, ['gemini-main-free1', 'gemini-main-free1', 'gemini-main-free2', 'gemini-main']);
   assert.match(sent[0], /Using the "free1" Gemini key first/);
   assert.ok(sent.some((t) => /"free1" Gemini key reached its limit — switched to "free2"/.test(t)));
   assert.ok(sent.some((t) => /"free2" Gemini key reached its limit — switched to "default" \(the paid key\)/.test(t)));
   assert.equal(sent.at(-1), 'done');
-  assert.match(prompts[1], /Continue the task from where you stopped/);
+  assert.match(prompts[1], /per-minute usage limit/);
+  assert.match(prompts[2], /Continue the task from where you stopped/);
   assert.equal(boss.keyName(), '');        // stays on the paid key for the rest of the day
 
   // every key used up: one clear message, no endless loop
   models.length = 0; limitedUntil = 99;
   boss.enqueue({ chatId: '1', prompt: 'again' }); await tick(); await tick();
-  assert.equal(models.length, 1);
+  assert.equal(models.length, 2);                  // one retry after a minute, then a clear message (no loop)
   assert.match(sent.at(-1), /Every Gemini key is out/);
 });
 
@@ -176,4 +177,30 @@ test('a key refused for payment (402, no credit) is treated like a used-up key',
   boss.enqueue({ chatId: '1', prompt: 'x' }); await tick(); await tick();
   assert.deepEqual(models, ['gemini-main-free1', 'gemini-main-free2']);
   assert.equal(sent.at(-1), 'ok');
+});
+
+test('a per-minute limit is retried once on the same key before switching', async () => {
+  const cfg = readConfig(Object.assign({ HQ_WORKSPACE: tmp(), ANTHROPIC_API_KEY: 'k' }, GEMINI, { GEMINI_KEY_FREE1: 'a', GEMINI_KEY_FREE2: 'b' }));
+  const store = makeStore(tmp());
+  const sent = [], models = [];
+  const queryFn = ({ options }) => {
+    if (Array.isArray(options.tools) && options.tools.length === 0) return (async function* () {})();
+    models.push(options.model);
+    const bad = models.length === 1;
+    return (async function* () {
+      yield bad ? { type: 'result', subtype: 'success', is_error: true, result: 'API Error: 429 RESOURCE_EXHAUSTED tokens per minute', session_id: 's1', total_cost_usd: 0 }
+        : { type: 'result', subtype: 'success', is_error: false, result: 'ok', session_id: 's1', total_cost_usd: 0, num_turns: 1 };
+    })();
+  };
+  const boss = makeBoss({ cfg, tg: { send: async (c, t) => { sent.push(t); return {}; }, typing: () => null }, store, usage: makeUsage(store, cfg), approvals: { request: async () => ({ allowed: true }), cancelAll() {} }, hqServer: {}, log: () => null, queryFn });
+  boss.enqueue({ chatId: '1', prompt: 'x' }); await tick(); await tick();
+  assert.deepEqual(models, ['gemini-main-free1', 'gemini-main-free1']);   // same key, second try works
+  assert.ok(!sent.some((t) => /switched to/.test(t)));
+  assert.equal(sent.at(-1), 'ok');
+});
+
+test('the Gemini manager is told to answer questions directly and not resume old work', () => {
+  const { boss, seen } = run(GEMINI);
+  boss.enqueue({ chatId: '1', prompt: 'x' });
+  return tick().then(() => assert.match(seen[0].systemPrompt.append, /Never resume or continue earlier work/));
 });
