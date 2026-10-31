@@ -51,6 +51,7 @@ export function readConfig(env = process.env) {
     // Automatic switching: when a key hits its limit, move to the next one (in .env order), ending
     // on the default GEMINI_API_KEY. GEMINI_KEY_AUTO=0 turns it off (then only /key switches).
     geminiKeyAuto: e('GEMINI_KEY_AUTO', '1') !== '0',
+    geminiMinuteWaitMs: env.GEMINI_MINUTE_WAIT_MS !== undefined ? Number(env.GEMINI_MINUTE_WAIT_MS) : -1,
     geminiKeys: Object.keys(env).filter((k) => /^GEMINI_KEY_[A-Za-z0-9_]+$/.test(k) && String(env[k]).trim()).map((k) => k.slice(11).toLowerCase()),
     name: e('HQ_NAME', 'AgenticCore HQ'),
     lite: e('HQ_LITE') === '1',          // the cost-effective edition (scripts/lite.ps1)
