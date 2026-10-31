@@ -103,6 +103,24 @@ powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ-Lite\scripts\lite-gemi
 - **Automatic switching** (on by default when extra keys exist): Lite starts the day on the first extra key. When a key reaches its limit, it switches to the next one in `.env` order, ending on the default (paid) `GEMINI_API_KEY`. It tells you in Telegram each time and continues the task. At midnight Pacific time (when free limits reset) it goes back to the first key. `GEMINI_KEY_AUTO=0` turns it off.
 - The `$` figures in `/cost` are estimates on Gemini. The real bill is in Google AI Studio, so set a spend limit there.
 
+## AgenticCore Mini (the very cheap fourth bot)
+
+Mini is a fourth copy for small daily tasks: chat, quick research, captions and posts, checking pages. It runs on the cheapest Gemini models with a lean tool set (no Supabase, Netlify or GitHub, which stay with HQ). HQ, Lite and Outreach are not touched. It has its own Telegram bot, folder (`C:\AgenticCoreHQ-Mini`), Edge window (port 9225) and gateway (port 4124). It uses the same Gemini keys as Lite: free ones first, then the paid one, switching automatically, with `/key` to switch by hand.
+
+```
+powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\lite.ps1 -Edition mini
+powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ-Mini\scripts\lite-gemini.ps1
+```
+
+| Role | Model | Thinking | Free tier (per key) |
+|---|---|---|---|
+| Manager | `gemini-3.5-flash-lite` | medium | 15/min, 500/day |
+| Helpers | `gemini-3.5-flash-lite` | low | (shared with the manager) |
+| Scout and quick replies | `gemini-3.1-flash-lite` | low | 15/min, 500/day |
+| Hard jobs (`/model fable`) | `gemini-3.8-flash` | medium | 5/min, 20/day |
+
+The models and thinking levels can be changed in Mini's `.env` (`LITE_GEMINI_*`, `LITE_GEMINI_*_EFFORT`), then run `lite-gemini.ps1` again.
+
 ## AgenticCore Outreach (the field team for the outreach plan)
 
 A third copy for the Global Outreach Plan (the .agency, .biz and .click brands; Pakistan real estate and the PK/estate sites are out of scope). The Sonnet manager only talks and plans. It has no browser: research and Gmail sending go to the Haiku scout, and everything else goes to helpers or plain code.
