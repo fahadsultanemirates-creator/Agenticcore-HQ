@@ -11,6 +11,8 @@
 #   LITE_GEMINI_HELPER helpers                     same as main              (thinking: medium)
 #   LITE_GEMINI_SCOUT  scout + quick replies       newest gemini-3.5-flash   (thinking: low)
 #   LITE_GEMINI_HARD   hard jobs (/model fable)    newest gemini-4 pro       (thinking: high)
+# Thinking levels can be changed the same way: LITE_GEMINI_MAIN_EFFORT, _HELPER_EFFORT, _SCOUT_EFFORT,
+# _HARD_EFFORT (low / medium / high). The Mini bot (lite.ps1 -Edition mini) sets Flash Lite models here.
 #
 # More Gemini keys (e.g. a free-tier project and a paid one): add one line per key to .env,
 #   GEMINI_KEY_FREE=...   GEMINI_KEY_PAID=...   (any name: letters, digits, _)
@@ -21,8 +23,6 @@ $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $envFile = Join-Path $Root '.env'
 $gwDir = Join-Path $Root 'gateway'
-$Port = '4123'
-$GwTask = 'AgenticCore Lite Gateway'
 $LiteLLMVersion = '1.106.6'
 
 if (-not (Test-Path $envFile)) { throw "No .env in $Root. Run this from the Lite folder (C:\AgenticCoreHQ-Lite\scripts)." }
@@ -38,6 +38,9 @@ function Save-Env { Set-Content -Path $envFile -Value $lines -Encoding ASCII }
 
 if ((Get-Val 'HQ_LITE') -ne '1' -or (Get-Val 'HQ_OUTREACH') -eq '1') { throw 'This is only for the Lite bot. HQ and Outreach stay on Claude.' }
 $task = Get-Val 'HQ_TASK'; if (-not $task) { $task = 'AgenticCore Lite' }
+# Each copy (Lite, Mini) has its own gateway port and task, so they can run side by side.
+$Port = Get-Val 'GATEWAY_PORT'; if ($Port -notmatch '^\d+$') { $Port = '4123' }
+$GwTask = "$task Gateway"
 $MODEL_KEYS = @('HQ_MODEL', 'HQ_EFFORT', 'HQ_MODEL_HARD', 'HQ_HELPER_MODEL', 'HQ_HELPER_EFFORT', 'HQ_SCOUT_MODEL', 'HQ_SCOUT_EFFORT')
 
 function Restart-Lite {
@@ -99,10 +102,12 @@ if ($missing.Count) {
   Write-Host ('Gemini models your key can use: ' + ($all -join ', ')) -ForegroundColor Yellow
   throw ('Not found: ' + ($missing -join ', ') + '. Put the right id in .env (LITE_GEMINI_MAIN / LITE_GEMINI_SCOUT / LITE_GEMINI_HARD) and run this again.')
 }
-Write-Host "OK  main   $main (thinking medium)"
-Write-Host "OK  helper $helper (thinking medium)"
-Write-Host "OK  scout  $scout (thinking low)"
-Write-Host "OK  hard   $hard (thinking high)"
+function Effort($role, $default) { $v = Get-Val ('LITE_GEMINI_' + $role + '_EFFORT'); if ($v -match '^(low|medium|high)$') { return $v } else { return $default } }
+$effMain = Effort 'MAIN' 'medium'; $effHelper = Effort 'HELPER' 'medium'; $effScout = Effort 'SCOUT' 'low'; $effHard = Effort 'HARD' 'high'
+Write-Host "OK  main   $main (thinking $effMain)"
+Write-Host "OK  helper $helper (thinking $effHelper)"
+Write-Host "OK  scout  $scout (thinking $effScout)"
+Write-Host "OK  hard   $hard (thinking $effHard)"
 
 # ---------- 2. Python + LiteLLM (the gateway) ----------
 New-Item -ItemType Directory -Force -Path $gwDir | Out-Null
@@ -139,23 +144,23 @@ function Entry($alias, $model, $effort, $keyVar = 'GEMINI_API_KEY') {
 # Extra named keys (GEMINI_KEY_<NAME>=...): each gets its own set of aliases, e.g. gemini-main-free.
 $extraKeys = @($lines | Where-Object { $_ -match '^GEMINI_KEY_[A-Za-z0-9_]+=.+' } | ForEach-Object { ($_ -split '=', 2)[0] })
 $yaml = "model_list:`n"
-$yaml += Entry 'gemini-main' $main 'medium'
-$yaml += Entry 'gemini-helper' $helper 'medium'
-$yaml += Entry 'gemini-scout' $scout 'low'
-$yaml += Entry 'gemini-hard' $hard 'high'
+$yaml += Entry 'gemini-main' $main $effMain
+$yaml += Entry 'gemini-helper' $helper $effHelper
+$yaml += Entry 'gemini-scout' $scout $effScout
+$yaml += Entry 'gemini-hard' $hard $effHard
 foreach ($kv in $extraKeys) {
   $name = $kv.Substring(11).ToLower()
-  $yaml += Entry ('gemini-main-' + $name) $main 'medium' $kv
-  $yaml += Entry ('gemini-helper-' + $name) $helper 'medium' $kv
-  $yaml += Entry ('gemini-scout-' + $name) $scout 'low' $kv
-  $yaml += Entry ('gemini-hard-' + $name) $hard 'high' $kv
+  $yaml += Entry ('gemini-main-' + $name) $main $effMain $kv
+  $yaml += Entry ('gemini-helper-' + $name) $helper $effHelper $kv
+  $yaml += Entry ('gemini-scout-' + $name) $scout $effScout $kv
+  $yaml += Entry ('gemini-hard-' + $name) $hard $effHard $kv
   Write-Host "OK  extra key '$name' (switch with /key $name in Telegram)"
 }
 # Safety net: any Claude model name that reaches the gateway still lands on Gemini.
-$yaml += Entry 'claude-haiku-5-5' $scout 'low'
-$yaml += Entry 'claude-sonnet-5-5' $main 'medium'
-$yaml += Entry 'claude-opus-5-5' $hard 'high'
-$yaml += Entry 'claude-fable-5-1' $hard 'high'
+$yaml += Entry 'claude-haiku-5-5' $scout $effScout
+$yaml += Entry 'claude-sonnet-5-5' $main $effMain
+$yaml += Entry 'claude-opus-5-5' $hard $effHard
+$yaml += Entry 'claude-fable-5-1' $hard $effHard
 $yaml += "litellm_settings:`n  drop_params: true`n  num_retries: 2`n  request_timeout: 600`ngeneral_settings:`n  master_key: os.environ/GATEWAY_KEY`n"
 Set-Content -Path (Join-Path $gwDir 'config.yaml') -Value $yaml -Encoding ASCII
 

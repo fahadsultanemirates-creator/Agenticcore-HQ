@@ -6,7 +6,10 @@
 # Safe to run again: it updates the code and keeps what is already set.
 # The Outreach edition (the field team for the outreach plan) installs the same way:
 #   powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\lite.ps1 -Edition outreach
-param([ValidateSet('lite', 'outreach')][string]$Edition = 'lite')
+# The Mini edition (very cheap, Gemini Flash Lite, lean tools: no Supabase / Netlify / GitHub):
+#   powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ\scripts\lite.ps1 -Edition mini
+# then switch it to Gemini:  powershell -ExecutionPolicy Bypass -File C:\AgenticCoreHQ-Mini\scripts\lite-gemini.ps1
+param([ValidateSet('lite', 'outreach', 'mini')][string]$Edition = 'lite')
 
 $ErrorActionPreference = 'Stop'
 $Hq = Split-Path -Parent $PSScriptRoot
@@ -15,6 +18,10 @@ $E = @{
   outreach = @{ Folder = "$Hq-Outreach"; Name = 'AgenticCore Outreach'; Port = '9224'; Budget = '15'; Job = '8'
     Extra = @{ HQ_OUTREACH = '1'; HQ_MANAGER_NO_BROWSER = '1'; OUTREACH_EMAIL_ACCOUNTS = ''; OUTREACH_EMAIL_PER_ACCOUNT = '8'
       OUTREACH_RESEARCH_TIME = '03:00'; OUTREACH_REPORT_TIME = '10:00'; OUTREACH_EVENING_TIME = '20:30' } }
+  mini = @{ Folder = "$Hq-Mini"; Name = 'AgenticCore Mini'; Port = '9225'; Budget = '10'; Job = '3'
+    Extra = @{ GATEWAY_PORT = '4124'; NETLIFY_TOKEN = ''; SUPABASE_TOKEN_1 = ''; SUPABASE_TOKEN_2 = ''; SUPABASE_TOKEN_3 = ''; GH_TOKEN = ''
+      LITE_GEMINI_MAIN = 'gemini-3.5-flash-lite'; LITE_GEMINI_HELPER = 'gemini-3.5-flash-lite'; LITE_GEMINI_SCOUT = 'gemini-3.1-flash-lite'; LITE_GEMINI_HARD = 'gemini-3.8-flash'
+      LITE_GEMINI_MAIN_EFFORT = 'medium'; LITE_GEMINI_HELPER_EFFORT = 'low'; LITE_GEMINI_SCOUT_EFFORT = 'low'; LITE_GEMINI_HARD_EFFORT = 'medium' } }
 }[$Edition]
 $Lite = $E.Folder
 $BotName = $E.Name
@@ -59,7 +66,7 @@ $t = Get-Content $hqEnv | Where-Object { $_ -like 'TELEGRAM_BOT_TOKEN=*' } | Sel
 if ($t) { $hqToken = $t.Substring(19) }
 $hint = if ($fresh) { '' } else { ' [press Enter to keep the current one]' }
 $otherTokens = @($hqToken)
-foreach ($other in "$Hq-Lite", "$Hq-Outreach") {
+foreach ($other in "$Hq-Lite", "$Hq-Outreach", "$Hq-Mini") {
   $oe = Join-Path $other '.env'
   if (($other -ne $Lite) -and (Test-Path $oe)) { $t2 = Get-Content $oe | Where-Object { $_ -like 'TELEGRAM_BOT_TOKEN=*' } | Select-Object -First 1; if ($t2) { $otherTokens += $t2.Substring(19) } }
 }
@@ -84,6 +91,13 @@ if ($fresh) {
   }
   foreach ($k in $preset.Keys) { Set-Val $k $preset[$k] }
   foreach ($k in $E.Extra.Keys) { Set-Val $k $E.Extra[$k] }
+  if ($Edition -eq 'mini') {
+    # Same Gemini keys as Lite (free ones first, then the paid one), if Lite has them.
+    $liteEnvFile = Join-Path "$Hq-Lite" '.env'
+    if (Test-Path $liteEnvFile) {
+      foreach ($l in (Get-Content $liteEnvFile)) { if ($l -match '^(GEMINI_API_KEY|GEMINI_KEY_[A-Za-z0-9_]+)=(.+)$') { Set-Val $Matches[1] $Matches[2] } }
+    }
+  }
   for ($i = $lines.Count - 1; $i -ge 0; $i--) { if ($lines[$i] -like 'HQ_DATA=*' -or $lines[$i] -like 'HQ_LOGS=*') { $lines.RemoveAt($i) } }
 }
 Set-Content -Path $liteEnv -Value $lines -Encoding UTF8
@@ -143,5 +157,6 @@ if (-not $up) {
   Write-Host '  2. Minimise it - never close it. Close Remote Desktop with the X, not Sign out.'
 }
 Write-Host "In Telegram, press Start on the $BotName bot and send /help. It should also say `"$BotName is online`"."
+if ($Edition -eq 'mini') { Write-Host "Next, switch Mini to Gemini Flash Lite:  powershell -ExecutionPolicy Bypass -File $Lite\scripts\lite-gemini.ps1" -ForegroundColor Yellow }
 if ($Edition -eq 'outreach') { Write-Host "Then set the sending Gmail accounts: notepad $Lite\.env  ->  OUTREACH_EMAIL_ACCOUNTS=a@gmail.com,b@gmail.com  and run update.ps1 below." }
 Write-Host "Update it later:  powershell -ExecutionPolicy Bypass -File $Lite\scripts\update.ps1"
